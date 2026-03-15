@@ -28,6 +28,7 @@ import { createMutationTools } from '../cli/mcp-tools/mutation-tools.js';
 import { createJobTools } from '../cli/mcp-tools/job-tools.js';
 import { createEngine } from '../cli/engine/index.js';
 import type { EngineConfig } from '../cli/engine/index.js';
+import { JobWorker } from '../cli/engine/job-worker.js';
 import type { ToolDefinition } from '../cli/mcp-tools/types.js';
 
 // --- Resolve project paths ---
@@ -143,16 +144,24 @@ async function main() {
     }
   });
 
+  // Start job worker (polls queue, dispatches to engine)
+  const worker = new JobWorker(store, engine, treePath, {
+    pollIntervalMs: config.worker?.poll_interval_ms || 3000
+  });
+  worker.start();
+
   // Start stdio transport
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   // Cleanup on exit
   process.on('SIGINT', () => {
+    worker.stop();
     store.close();
     process.exit(0);
   });
   process.on('SIGTERM', () => {
+    worker.stop();
     store.close();
     process.exit(0);
   });
