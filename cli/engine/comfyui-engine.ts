@@ -1,7 +1,10 @@
 /**
  * ComfyUI Engine — generates images via the ComfyUI API
  *
- * ComfyUI exposes a REST + WebSocket API:
+ * Uses Connectors to build model-specific workflows.
+ * The engine handles API communication, the connector handles workflow structure.
+ *
+ * ComfyUI API:
  * - POST /prompt — submit a workflow
  * - GET /history/{prompt_id} — check status
  * - GET /view?filename=... — download result
@@ -9,6 +12,8 @@
 import fs from 'fs';
 import path from 'path';
 import type { Engine, GenerationRequest, GenerationResult, EngineConfig } from './types.js';
+import { getConnector } from './connectors/index.js';
+import type { ConnectorRequest } from './connectors/index.js';
 
 export class ComfyUIEngine implements Engine {
   name = 'comfyui';
@@ -31,9 +36,29 @@ export class ComfyUIEngine implements Engine {
 
   async generate(request: GenerationRequest, outputPath: string): Promise<GenerationResult> {
     const start = Date.now();
+    const model = request.model || this.config.default_model;
     const seed = request.seed ?? Math.floor(Math.random() * 999999999);
 
-    const workflow = this.buildWorkflow(request, seed);
+    // Find the right connector for this model
+    const connector = getConnector(model);
+
+    // Build request with connector defaults as fallback
+    const connectorReq: ConnectorRequest = {
+      prompt: request.prompt,
+      negative_prompt: connector.supports_negative ? request.negative_prompt : undefined,
+      width: request.width || connector.defaults.width,
+      height: request.height || connector.defaults.height,
+      steps: request.steps || connector.defaults.steps,
+      cfg: request.cfg || connector.defaults.cfg,
+      seed,
+      sampler: request.sampler || connector.defaults.sampler,
+      scheduler: request.scheduler || connector.defaults.scheduler,
+      style_image: request.style_image,
+      style_weight: request.style_weight
+    };
+
+    // Build workflow via connector
+    const workflow = connector.buildWorkflow(model, connectorReq);
 
     try {
       // Submit workflow
@@ -45,7 +70,7 @@ export class ComfyUIEngine implements Engine {
 
       if (!submitRes.ok) {
         const errText = await submitRes.text();
-        return { success: false, error: `ComfyUI submit failed: ${errText}` };
+        return { success: false, error: `ComfyUI submit failed (${connector.id}): ${errText}` };
       }
 
       const { prompt_id } = await submitRes.json() as { prompt_id: string };
@@ -82,7 +107,6 @@ export class ComfyUIEngine implements Engine {
     fs.mkdirSync(outputDir, { recursive: true });
     const results: GenerationResult[] = [];
 
-    // Sequential for now — ComfyUI queues internally
     for (let i = 0; i < requests.length; i++) {
       const outputPath = path.join(outputDir, `${(i + 1).toString().padStart(3, '0')}.png`);
       const result = await this.generate(requests[i], outputPath);
@@ -90,73 +114,6 @@ export class ComfyUIEngine implements Engine {
     }
 
     return results;
-  }
-
-  // --- Internal ---
-
-  private buildWorkflow(request: GenerationRequest, seed: number): Record<string, any> {
-    // Basic txt2img workflow
-    // This is a minimal ComfyUI API workflow — real projects will use
-    // custom workflow templates from .aida/engine/workflows/
-    return {
-      '1': {
-        class_type: 'CheckpointLoaderSimple',
-        inputs: {
-          ckpt_name: request.model || this.config.default_model
-        }
-      },
-      '2': {
-        class_type: 'CLIPTextEncode',
-        inputs: {
-          text: request.prompt,
-          clip: ['1', 1]
-        }
-      },
-      '3': {
-        class_type: 'CLIPTextEncode',
-        inputs: {
-          text: request.negative_prompt || '',
-          clip: ['1', 1]
-        }
-      },
-      '4': {
-        class_type: 'EmptyLatentImage',
-        inputs: {
-          width: request.width || this.config.default_width,
-          height: request.height || this.config.default_height,
-          batch_size: 1
-        }
-      },
-      '5': {
-        class_type: 'KSampler',
-        inputs: {
-          model: ['1', 0],
-          positive: ['2', 0],
-          negative: ['3', 0],
-          latent_image: ['4', 0],
-          seed,
-          steps: request.steps || this.config.default_steps,
-          cfg: request.cfg || this.config.default_cfg,
-          sampler_name: request.sampler || this.config.default_sampler,
-          scheduler: request.scheduler || this.config.default_scheduler,
-          denoise: 1.0
-        }
-      },
-      '6': {
-        class_type: 'VAEDecode',
-        inputs: {
-          samples: ['5', 0],
-          vae: ['1', 2]
-        }
-      },
-      '7': {
-        class_type: 'SaveImage',
-        inputs: {
-          images: ['6', 0],
-          filename_prefix: 'aida'
-        }
-      }
-    };
   }
 
   private async waitForResult(promptId: string, maxWait: number = 300000): Promise<{ success: boolean; filename?: string; error?: string }> {
@@ -174,7 +131,6 @@ export class ComfyUIEngine implements Engine {
         if (!entry) continue;
 
         if (entry.status?.completed) {
-          // Find output image
           const outputs = entry.outputs;
           for (const nodeId of Object.keys(outputs)) {
             const images = outputs[nodeId]?.images;

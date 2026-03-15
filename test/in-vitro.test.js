@@ -85,7 +85,7 @@ function simulateHumanNote(genomeSnapshot) {
 
 // Engine config — reads from AIDA_ENGINE_URL env or defaults to localhost ComfyUI
 const ENGINE_URL = process.env.AIDA_ENGINE_URL || 'http://localhost:8188';
-const ENGINE_MODEL = process.env.AIDA_ENGINE_MODEL || 'flux-dev';
+const ENGINE_MODEL = process.env.AIDA_ENGINE_MODEL || 'flux1-dev-fp8.safetensors';
 
 async function checkGpuAvailable() {
   try {
@@ -110,15 +110,17 @@ function createTestEnv() {
   );
 
   const store = new Store({ treePath, dbPath, axesPath });
+  // Connector handles model-specific params (steps, cfg, sampler, scheduler)
+  // No need to know if it's Flux, SDXL, or SD1.5
   const engine = createEngine({
     backend: 'comfyui',
     api_url: ENGINE_URL,
     default_model: ENGINE_MODEL,
-    default_steps: 20,
-    default_cfg: 7.0,
-    default_sampler: 'euler',
-    default_scheduler: 'normal',
-    default_width: 512,       // smaller for faster test iterations
+    default_steps: 0,          // 0 = use connector defaults
+    default_cfg: 0,            // 0 = use connector defaults
+    default_sampler: '',       // '' = use connector defaults
+    default_scheduler: '',     // '' = use connector defaults
+    default_width: 512,        // 512x512 for 8GB VRAM
     default_height: 512,
     batch_size: 3,
     seed_mode: 'random'
