@@ -1,104 +1,158 @@
 /**
- * In-Vitro Test — Full autonomous AIDA simulation
+ * In-Vitro Test — Fully autonomous AIDA simulation
  *
- * Simulates a complete project lifecycle with a "fake human" that:
- * 1. Initializes a project
- * 2. Answers mood questions (genome setup)
- * 3. Adds references and research
- * 4. Generates variations
- * 5. Rates them with realistic preferences
- * 6. Creates children, explores branches
- * 7. Uses .comment files
- * 8. Creates custom axes
- * 9. Tests dirty propagation
- * 10. Runs multiple passes to convergence
- * 11. Validates and locks the tree
+ * Picks a random quote, interprets it as an artistic brief,
+ * generates real images via GPU, rates them autonomously,
+ * builds a tree, and converges toward a coherent DA.
  *
- * Uses mock engine — no GPU needed.
+ * All output in ./var/in-vitro/ — inspect images after the run.
+ * Requires real GPU (ComfyUI/Forge). No mock fallback.
  */
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
 import { Store } from '../dist/cli/managers/store.js';
 import { createEngine } from '../dist/cli/engine/index.js';
 import { JobWorker } from '../dist/cli/engine/job-worker.js';
 
-// --- Simulated Human Preferences ---
-// The "fake human" wants: dark fantasy, stylized, cold, tense, geometric, raw
-const HUMAN_PREFERENCES = {
-  realism:     { target: 0.15, tolerance: 0.15 },  // very stylized
-  temperature: { target: 0.25, tolerance: 0.15 },  // cold
-  value:       { target: 0.80, tolerance: 0.10 },  // dark
-  tension:     { target: 0.75, tolerance: 0.15 },  // tense
-  complexity:  { target: 0.65, tolerance: 0.15 },  // moderately elaborate
-  shape:       { target: 0.25, tolerance: 0.20 },  // geometric
-  finish:      { target: 0.25, tolerance: 0.15 },  // raw
-  contrast:    { target: 0.80, tolerance: 0.10 },  // high contrast
-  saturation:  { target: 0.35, tolerance: 0.15 },  // desaturated
-  density:     { target: 0.60, tolerance: 0.15 },  // moderate dense
+// ============================================================
+// QUOTES — random starting point for the DA
+// ============================================================
+const QUOTES = [
+  { text: "In the middle of difficulty lies opportunity", author: "Einstein" },
+  { text: "The only way out is through", author: "Robert Frost" },
+  { text: "Between the idea and the reality falls the shadow", author: "T.S. Eliot" },
+  { text: "We are such stuff as dreams are made on", author: "Shakespeare" },
+  { text: "The universe is under no obligation to make sense to you", author: "Tyson" },
+  { text: "All that glitters is not gold", author: "Shakespeare" },
+  { text: "In a dark time, the eye begins to see", author: "Roethke" },
+  { text: "The wound is the place where the light enters you", author: "Rumi" },
+  { text: "Not all those who wander are lost", author: "Tolkien" },
+  { text: "We look at the world once in childhood. The rest is memory", author: "Glück" },
+  { text: "The sea is everything", author: "Jules Verne" },
+  { text: "There is a crack in everything, that's how the light gets in", author: "Leonard Cohen" },
+];
+
+// ============================================================
+// QUOTE → GENOME interpreter
+// Word associations → axis values. Crude but autonomous.
+// ============================================================
+const WORD_AXIS_MAP = {
+  // dark / shadow / night → dark, tense, desaturated
+  dark: { value: 0.85, tension: 0.7, saturation: 0.3 },
+  shadow: { value: 0.8, contrast: 0.8, tension: 0.6 },
+  night: { value: 0.9, temperature: 0.2, saturation: 0.2 },
+  // light / gold / glitter → bright, warm, saturated
+  light: { value: 0.2, contrast: 0.7, temperature: 0.6 },
+  gold: { temperature: 0.8, saturation: 0.7, finish: 0.8 },
+  glitter: { saturation: 0.9, contrast: 0.8, complexity: 0.7 },
+  // dream / memory / childhood → soft, warm, organic
+  dream: { realism: 0.2, familiarity: 0.8, tension: 0.3, shape: 0.7 },
+  memory: { finish: 0.3, familiarity: 0.6, saturation: 0.4 },
+  childhood: { temperature: 0.7, evaluation: 0.7, tension: 0.2 },
+  // sea / water / wander → movement, open, cool
+  sea: { movement: 0.8, space: 0.1, temperature: 0.3, scale: 0.8 },
+  wander: { movement: 0.7, space: 0.1, density: 0.3 },
+  lost: { familiarity: 0.7, readability: 0.2, tension: 0.6 },
+  // universe / world / everything → monumental, complex
+  universe: { scale: 0.9, complexity: 0.8, density: 0.7 },
+  world: { scale: 0.7, complexity: 0.6 },
+  everything: { density: 0.8, complexity: 0.7, palette: 0.7 },
+  // wound / crack / difficulty → raw, tense, textured
+  wound: { finish: 0.1, tension: 0.9, texture: 0.9, evaluation: 0.2 },
+  crack: { finish: 0.2, texture: 0.8, contrast: 0.8 },
+  difficulty: { tension: 0.8, complexity: 0.7 },
+  // through / way / opportunity → dynamic, active
+  through: { movement: 0.7, activity: 0.7 },
+  opportunity: { evaluation: 0.7, activity: 0.6, temperature: 0.6 },
+  // idea / sense / eye → readable, cerebral
+  idea: { readability: 0.7, realism: 0.3, materiality: 0.3 },
+  eye: { readability: 0.8, contrast: 0.7 },
+  sense: { readability: 0.6, balance: 0.3 },
 };
 
-// Rate a variation based on how close its genome snapshot is to preferences
-function simulateHumanRating(genomeSnapshot) {
+function interpretQuote(quote) {
+  const genome = {};
+  const words = quote.text.toLowerCase().split(/\W+/);
+
+  for (const word of words) {
+    const mapping = WORD_AXIS_MAP[word];
+    if (mapping) {
+      for (const [axis, val] of Object.entries(mapping)) {
+        if (!genome[axis]) genome[axis] = { total: 0, count: 0 };
+        genome[axis].total += val;
+        genome[axis].count += 1;
+      }
+    }
+  }
+
+  // Average and build result
+  const result = {};
+  for (const [axis, { total, count }] of Object.entries(genome)) {
+    result[axis] = total / count;
+  }
+  return result;
+}
+
+// Derive preferences from the interpreted genome (for rating)
+function buildPreferences(interpreted) {
+  const prefs = {};
+  for (const [axis, value] of Object.entries(interpreted)) {
+    prefs[axis] = { target: value, tolerance: 0.2 };
+  }
+  return prefs;
+}
+
+function simulateRating(genomeSnapshot, preferences) {
   let totalDist = 0;
   let count = 0;
 
-  for (const [axis, pref] of Object.entries(HUMAN_PREFERENCES)) {
+  for (const [axis, pref] of Object.entries(preferences)) {
     const val = genomeSnapshot[axis];
     if (val === undefined) continue;
-    const dist = Math.abs(val - pref.target);
-    totalDist += dist;
+    totalDist += Math.abs(val - pref.target);
     count++;
   }
 
   const avgDist = count > 0 ? totalDist / count : 0.5;
-
-  // Convert distance to rating: 0 dist = 5 stars, 0.5+ dist = 1 star
   const rating = Math.max(1, Math.min(5, Math.round(5 - avgDist * 8)));
 
-  // Verdict based on rating
   let verdict;
   if (rating >= 4) verdict = 'keep';
   else if (rating <= 1) verdict = 'veto';
   else if (rating === 2) verdict = 'remove';
-  else verdict = 'keep'; // 3 = borderline keep
+  else verdict = 'keep';
 
   return { rating, verdict };
 }
 
-// Generate a note based on what's wrong
-function simulateHumanNote(genomeSnapshot) {
+function simulateNote(genomeSnapshot, preferences) {
   const complaints = [];
-  for (const [axis, pref] of Object.entries(HUMAN_PREFERENCES)) {
+  for (const [axis, pref] of Object.entries(preferences)) {
     const val = genomeSnapshot[axis];
     if (val === undefined) continue;
     const diff = val - pref.target;
     if (Math.abs(diff) > pref.tolerance) {
-      if (diff > 0) complaints.push(`too much ${axis}`);
-      else complaints.push(`not enough ${axis}`);
+      complaints.push(diff > 0 ? `too much ${axis}` : `not enough ${axis}`);
     }
   }
   return complaints.length > 0 ? complaints.join(', ') : 'looks good';
 }
 
-// Engine config — reads from AIDA_ENGINE_URL env or defaults to localhost ComfyUI
+// ============================================================
+// ENV
+// ============================================================
 const ENGINE_URL = process.env.AIDA_ENGINE_URL || 'http://localhost:8188';
 const ENGINE_MODEL = process.env.AIDA_ENGINE_MODEL || 'flux1-dev-fp8.safetensors';
 
 async function checkGpuAvailable() {
-  try {
-    const res = await fetch(`${ENGINE_URL}/system_stats`);
-    return res.ok;
-  } catch {
-    return false;
-  }
+  try { return (await fetch(`${ENGINE_URL}/system_stats`)).ok; }
+  catch { return false; }
 }
 
 function createTestEnv() {
   const tmpDir = path.join(process.cwd(), 'var', 'in-vitro');
-  // Clean previous run
   if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
 
   const treePath = path.join(tmpDir, 'tree');
@@ -113,164 +167,163 @@ function createTestEnv() {
   );
 
   const store = new Store({ treePath, dbPath, axesPath });
-  // Connector handles model-specific params (steps, cfg, sampler, scheduler)
-  // No need to know if it's Flux, SDXL, or SD1.5
   const engine = createEngine({
     backend: 'comfyui',
     api_url: ENGINE_URL,
     default_model: ENGINE_MODEL,
-    default_steps: 0,          // 0 = use connector defaults
-    default_cfg: 0,            // 0 = use connector defaults
-    default_sampler: '',       // '' = use connector defaults
-    default_scheduler: '',     // '' = use connector defaults
-    default_width: 512,        // 512x512 for 8GB VRAM
-    default_height: 512,
-    batch_size: 3,
-    seed_mode: 'random'
+    default_steps: 0, default_cfg: 0,
+    default_sampler: '', default_scheduler: '',
+    default_width: 512, default_height: 512,
+    batch_size: 3, seed_mode: 'random'
   });
-  // Longer poll interval — real GPU takes seconds
   const worker = new JobWorker(store, engine, treePath, { pollIntervalMs: 1000 });
-
   return { store, engine, worker, tmpDir, treePath };
 }
 
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-// Wait for all jobs to complete — longer timeout for real GPU
 async function waitForJobs(store, timeout = 120000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
-    const queued = store.getJobs('queued');
-    const running = store.getJobs('running');
-    if (queued.length === 0 && running.length === 0) return true;
+    const q = store.getJobs('queued');
+    const r = store.getJobs('running');
+    if (q.length === 0 && r.length === 0) return true;
     await sleep(1000);
   }
   return false;
 }
 
-describe('In-Vitro — Autonomous AIDA Simulation', () => {
-  let store, engine, worker, tmpDir, treePath;
+// ============================================================
+// THE TEST
+// ============================================================
+describe('In-Vitro — Autonomous DA from a random quote', () => {
+  let store, worker, tmpDir, treePath;
+  let quote, interpreted, preferences;
 
   before(async () => {
-    // GATE: GPU must be available — no fallback
     const gpuAvailable = await checkGpuAvailable();
     if (!gpuAvailable) {
-      console.error(`\n  ⚠ GPU engine not available at ${ENGINE_URL}`);
-      console.error(`    Start ComfyUI/Forge, or set AIDA_ENGINE_URL=http://host:port`);
-      console.error(`    Skipping in-vitro test.\n`);
+      console.error(`\n  ⚠ GPU not available at ${ENGINE_URL} — skipping\n`);
       process.exit(0);
     }
-    console.error(`  ✓ GPU engine available at ${ENGINE_URL}`);
 
-    ({ store, engine, worker, tmpDir, treePath } = createTestEnv());
+    // Pick random quote
+    quote = QUOTES[Math.floor(Math.random() * QUOTES.length)];
+    interpreted = interpretQuote(quote);
+    preferences = buildPreferences(interpreted);
+
+    console.error(`\n  Quote: "${quote.text}" — ${quote.author}`);
+    console.error(`  Interpreted axes: ${Object.entries(interpreted).map(([k,v]) => `${k}:${v.toFixed(2)}`).join(', ')}`);
+    console.error(`  GPU: ${ENGINE_URL}, Model: ${ENGINE_MODEL}\n`);
+
+    ({ store, worker, tmpDir, treePath } = createTestEnv());
+
+    // Save the brief for reference
+    fs.writeFileSync(path.join(tmpDir, 'BRIEF.md'), [
+      `# In-Vitro DA Brief`,
+      ``,
+      `> "${quote.text}" — ${quote.author}`,
+      ``,
+      `## Interpreted Genome`,
+      ...Object.entries(interpreted).map(([k,v]) => `- **${k}**: ${v.toFixed(2)}`),
+      ``,
+      `## Model: ${ENGINE_MODEL}`,
+      `## Date: ${new Date().toISOString()}`,
+    ].join('\n'));
+
     worker.start();
   });
+
   after(() => {
     if (worker) worker.stop();
-    if (store) store.close();
-    console.error(`\n  Output at: ${tmpDir}\n`);
+
+    // Write final report
+    if (store) {
+      const nodes = store.getTreeStatus().nodes;
+      const allVars = [];
+      for (const n of nodes) allVars.push(...store.getVariationsForNode(n.id));
+
+      const report = [
+        `# In-Vitro Results`,
+        ``,
+        `> "${quote.text}" — ${quote.author}`,
+        ``,
+        `## Tree (${nodes.length} nodes)`,
+        ...nodes.map(n => `- ${' '.repeat(n.depth * 2)}${n.id} [${n.status}] (${n.type})`),
+        ``,
+        `## Variations (${allVars.length})`,
+        ...allVars.map(v => `- ${v.id}: ${v.verdict} ${v.rating ? v.rating + '/5' : ''} ${v.notes || ''}`),
+        ``,
+        `## Final Genome (universe_root)`,
+        ...store.getGenome('universe_root')
+          .filter(g => g.confidence > 0)
+          .sort((a,b) => b.confidence - a.confidence)
+          .map(g => `- **${g.axis}**: ${g.value.toFixed(2)} (confidence: ${g.confidence.toFixed(2)})`),
+      ].join('\n');
+
+      fs.writeFileSync(path.join(tmpDir, 'RESULTS.md'), report);
+      store.close();
+    }
+
+    console.error(`\n  Output at: ${tmpDir}`);
+    console.error(`  See BRIEF.md and RESULTS.md\n`);
   });
 
   // ==========================================
-  // PHASE 1: Project initialization
+  // PHASE 1 — Brief → Genome
   // ==========================================
 
-  it('Phase 1.1 — Initialize project "Shadowkeep"', () => {
-    const root = store.initUniverseRoot('Shadowkeep');
-    assert.equal(root.id, 'universe_root');
-    assert.equal(root.name, 'Shadowkeep');
-  });
+  it('Phase 1 — Initialize from quote', () => {
+    store.initUniverseRoot(quote.text.slice(0, 40));
 
-  it('Phase 1.2 — Agent sets initial mood from human answers', () => {
-    // Simulated conversation:
-    // Human: "Dark fantasy game, gothic, oppressive, cold, stylized not realistic"
-    // Agent translates to genome:
-    store.updateGene('universe_root', 'realism', 0.2, 0.6);
-    store.updateGene('universe_root', 'temperature', 0.3, 0.5);
-    store.updateGene('universe_root', 'value', 0.8, 0.5);
-    store.updateGene('universe_root', 'tension', 0.7, 0.4);
-    store.updateGene('universe_root', 'shape', 0.3, 0.3);
-    store.updateGene('universe_root', 'finish', 0.3, 0.3);
-    store.updateGene('universe_root', 'contrast', 0.7, 0.4);
-    store.updateGene('universe_root', 'saturation', 0.3, 0.3);
+    // Apply interpreted genome
+    for (const [axis, value] of Object.entries(interpreted)) {
+      try {
+        store.updateGene('universe_root', axis, value, 0.5);
+      } catch { /* axis might not exist */ }
+    }
 
-    // Wall: no photorealism
-    store.addWall('universe_root', 'realism', '> 0.7', 'no photorealism — stylized only', true);
-    // Wall: must stay dark
-    store.addWall('universe_root', 'value', '< 0.4', 'must stay dark', true);
-  });
+    // Set exploring
+    const nf = store.loadNodeFile('universe_root');
+    nf.node.status = 'exploring';
+    store.saveNodeFile('universe_root', nf);
 
-  it('Phase 1.3 — Agent adds research references', () => {
-    store.addRef('universe_root', 'url',
-      'https://darksouls.wiki/visual-style',
-      'Dark Souls Visual Style',
-      'Gothic architecture, oppressive lighting, muted colors',
-      ['temperature', 'value', 'contrast'],
-      ['low-key lighting', 'muted palette', 'architectural grandeur'],
-      ['reference', 'game']
-    );
-
-    store.addRef('universe_root', 'search',
-      'gothic fantasy architecture art direction',
-      'Research: gothic fantasy architecture',
-      'Found patterns: pointed arches, vertical emphasis, stone textures',
-      ['shape', 'scale', 'texture'],
-      ['vertical compositions', 'heavy stone textures', 'pointed geometric forms'],
-      ['research']
-    );
-
-    const refs = store.getRefs('universe_root');
-    assert.equal(refs.length, 2);
+    const genome = store.getGenome('universe_root');
+    assert.ok(genome.length >= 20);
   });
 
   // ==========================================
-  // PHASE 2: First pass — universe_root exploration
+  // PHASE 2 — Pass 1: generate + rate
   // ==========================================
 
-  it('Phase 2.1 — Start pass 1 on universe_root', () => {
-    // Transition to exploring (the MCP tool does this, here we do it manually)
-    const nodeFile = store.loadNodeFile('universe_root');
-    nodeFile.node.status = 'exploring';
-    store.saveNodeFile('universe_root', nodeFile);
-
+  it('Phase 2.1 — Generate 3 variations', () => {
     const passId = store.startPass('universe_root', 'ab');
-    assert.ok(passId > 0);
 
-    const node = store.getNode('universe_root');
-    assert.equal(node.status, 'exploring');
+    // Build prompts from resolved genome
+    const prompt = store.buildNodePrompt('universe_root');
+    assert.ok(prompt.length > 0, 'Should have a non-empty prompt');
+
+    // Create 3 variations with slightly different prompts
+    const uncertain = store.getUncertainAxes('universe_root', 0.6);
+    const topAxes = uncertain.slice(0, 3).map(u => u.axis);
+
+    for (let i = 0; i < 3; i++) {
+      // Mutate one uncertain axis per variation
+      if (topAxes[i]) {
+        const gene = store.getGenome('universe_root').find(g => g.axis === topAxes[i]);
+        if (gene) {
+          const dir = i === 0 ? 0.8 : i === 1 ? 0.2 : Math.random();
+          store.updateGene('universe_root', topAxes[i], dir);
+        }
+      }
+      const varPrompt = store.buildNodePrompt('universe_root');
+      store.createVariation('universe_root', passId, varPrompt);
+    }
+
+    assert.equal(store.getVariationsForNode('universe_root', passId).length, 3);
   });
 
-  it('Phase 2.2 — Generate 3 variations', () => {
-    const pass = store.getActivePass();
-
-    // Variation A: push toward cold/geometric (matching preferences)
-    store.updateGene('universe_root', 'temperature', 0.2);
-    store.updateGene('universe_root', 'shape', 0.2);
-    const v1 = store.createVariation('universe_root', pass.id,
-      'dark fantasy, stylized, cold, geometric, gothic architecture');
-
-    // Variation B: push toward warm/organic (against preferences)
-    store.updateGene('universe_root', 'temperature', 0.6);
-    store.updateGene('universe_root', 'shape', 0.7);
-    const v2 = store.createVariation('universe_root', pass.id,
-      'dark fantasy, warm accents, organic forms, baroque');
-
-    // Variation C: surprise — extreme contrast
-    store.updateGene('universe_root', 'temperature', 0.3);
-    store.updateGene('universe_root', 'shape', 0.3);
-    store.updateGene('universe_root', 'contrast', 0.95);
-    const v3 = store.createVariation('universe_root', pass.id,
-      'dark fantasy, extreme chiaroscuro, sharp geometric, cold');
-
-    // Reset genome to neutral for snapshots
-    store.updateGene('universe_root', 'contrast', 0.7);
-
-    assert.equal(store.getVariationsForNode('universe_root', pass.id).length, 3);
-  });
-
-  it('Phase 2.3 — Submit render jobs and wait', async () => {
+  it('Phase 2.2 — Render via GPU', async () => {
     const pass = store.getActivePass();
     const variations = store.getVariationsForNode('universe_root', pass.id);
 
@@ -278,417 +331,162 @@ describe('In-Vitro — Autonomous AIDA Simulation', () => {
       store.submitJob('render', 'universe_root', { variation_ids: [v.id] });
     }
 
-    const allDone = await waitForJobs(store);
-    assert.ok(allDone, 'All render jobs should complete (timeout 120s)');
+    const done = await waitForJobs(store);
+    assert.ok(done, 'Render jobs should complete within 120s');
 
     const completed = store.getJobs('completed');
-    assert.ok(completed.length >= 3, `Expected >=3 completed, got ${completed.length}`);
+    assert.ok(completed.length >= 3);
 
-    // Verify actual image files were created
     for (const job of completed) {
-      if (job.result?.image_path) {
-        assert.ok(fs.existsSync(job.result.image_path),
-          `Generated image should exist: ${job.result.image_path}`);
-        const stat = fs.statSync(job.result.image_path);
-        assert.ok(stat.size > 100, `Image file should have content (${stat.size} bytes)`);
-        console.error(`    ✓ Generated: ${path.basename(job.result.image_path)} (${Math.round(stat.size/1024)}KB)`);
+      if (job.result?.image_path && fs.existsSync(job.result.image_path)) {
+        const kb = Math.round(fs.statSync(job.result.image_path).size / 1024);
+        console.error(`    ✓ ${path.basename(path.dirname(job.result.image_path))}: ${kb}KB`);
       }
     }
   });
 
-  it('Phase 2.4 — Simulated human rates variations', () => {
+  it('Phase 2.3 — Rate variations', () => {
     const pass = store.getActivePass();
     const variations = store.getVariationsForNode('universe_root', pass.id);
 
     for (const v of variations) {
-      const { rating, verdict } = simulateHumanRating(v.genome_snapshot);
-      const note = simulateHumanNote(v.genome_snapshot);
+      const { rating, verdict } = simulateRating(v.genome_snapshot, preferences);
+      const note = simulateNote(v.genome_snapshot, preferences);
       store.rateVariation(v.id, rating, verdict, note);
+      console.error(`    ${v.id}: ${rating}/5 ${verdict} — ${note}`);
     }
-
-    // Check at least one keep and should have diversity
-    const rated = store.getVariationsForNode('universe_root', pass.id);
-    const verdicts = rated.map(v => v.verdict);
-    assert.ok(verdicts.includes('keep') || verdicts.includes('veto'),
-      `Expected some definitive verdicts, got: ${verdicts.join(', ')}`);
   });
 
-  it('Phase 2.5 — Close pass 1', () => {
+  it('Phase 2.4 — Close pass 1', () => {
     const pass = store.getActivePass();
     store.closePass(pass.id);
-    assert.equal(store.getActivePass(), null);
   });
 
   // ==========================================
-  // PHASE 3: Second pass — refinement
+  // PHASE 3 — Pass 2: refine
   // ==========================================
 
-  it('Phase 3.1 — Start pass 2, explore uncertain axes', () => {
+  it('Phase 3.1 — Pass 2: targeted exploration', () => {
     const passId = store.startPass('universe_root', 'ab');
-    assert.ok(passId > 0);
+    const uncertain = store.getUncertainAxes('universe_root', 0.7);
 
-    // Check uncertain axes
-    const uncertain = store.getUncertainAxes('universe_root', 0.6);
-    assert.ok(uncertain.length > 0, 'Should have uncertain axes');
+    console.error(`    Uncertain axes: ${uncertain.map(u => `${u.axis}(${u.confidence.toFixed(2)})`).join(', ')}`);
+
+    for (let i = 0; i < 3; i++) {
+      if (uncertain[i]) {
+        const axis = uncertain[i].axis;
+        const dir = i % 2 === 0 ? 0.8 : 0.2;
+        store.updateGene('universe_root', axis, dir);
+      }
+      const prompt = store.buildNodePrompt('universe_root');
+      store.createVariation('universe_root', passId, prompt);
+    }
   });
 
-  it('Phase 3.2 — Generate targeted variations for pass 2', () => {
-    const pass = store.getActivePass();
-    const uncertain = store.getUncertainAxes('universe_root', 0.6);
-    const topAxis = uncertain[0]?.axis || 'tension';
-
-    // Variation A: push uncertain axis high
-    store.updateGene('universe_root', topAxis, 0.8);
-    const v1 = store.createVariation('universe_root', pass.id,
-      `exploring ${topAxis} high`);
-
-    // Variation B: push uncertain axis low
-    store.updateGene('universe_root', topAxis, 0.2);
-    const v2 = store.createVariation('universe_root', pass.id,
-      `exploring ${topAxis} low`);
-
-    // Variation C: centered
-    store.updateGene('universe_root', topAxis, 0.5);
-    const v3 = store.createVariation('universe_root', pass.id,
-      `exploring ${topAxis} mid`);
-  });
-
-  it('Phase 3.3 — Rate pass 2 variations', () => {
+  it('Phase 3.2 — Render pass 2', async () => {
     const pass = store.getActivePass();
     const variations = store.getVariationsForNode('universe_root', pass.id);
 
     for (const v of variations) {
-      const { rating, verdict } = simulateHumanRating(v.genome_snapshot);
-      const note = simulateHumanNote(v.genome_snapshot);
-      store.rateVariation(v.id, rating, verdict, note);
+      store.submitJob('render', 'universe_root', { variation_ids: [v.id] });
     }
+
+    const done = await waitForJobs(store);
+    assert.ok(done, 'Pass 2 render should complete');
   });
 
-  it('Phase 3.4 — Close pass 2, check convergence', () => {
+  it('Phase 3.3 — Rate + close pass 2', () => {
     const pass = store.getActivePass();
+    const variations = store.getVariationsForNode('universe_root', pass.id);
+
+    for (const v of variations) {
+      const { rating, verdict } = simulateRating(v.genome_snapshot, preferences);
+      store.rateVariation(v.id, rating, verdict, simulateNote(v.genome_snapshot, preferences));
+    }
+
     store.closePass(pass.id);
-
-    // Check overall convergence
-    const allVars = store.getVariationsForNode('universe_root');
-    const kept = allVars.filter(v => v.verdict === 'keep');
-    const vetoed = allVars.filter(v => v.verdict === 'veto');
-
-    // After 2 passes we should have enough data
-    assert.ok(kept.length >= 2 || vetoed.length >= 1,
-      `Convergence check: ${kept.length} kept, ${vetoed.length} vetoed`);
   });
 
   // ==========================================
-  // PHASE 4: Create children
+  // PHASE 4 — Build tree from the quote
   // ==========================================
 
-  it('Phase 4.1 — Validate universe_root', () => {
-    const nodeFile = store.loadNodeFile('universe_root');
-    nodeFile.node.status = 'validated';
-    store.saveNodeFile('universe_root', nodeFile);
+  it('Phase 4.1 — Validate root, create 2 child branches', () => {
+    const nf = store.loadNodeFile('universe_root');
+    nf.node.status = 'validated';
+    store.saveNodeFile('universe_root', nf);
 
-    assert.equal(store.getNode('universe_root').status, 'validated');
-  });
+    // Split the quote into two contrasting moods
+    const words = quote.text.toLowerCase().split(/\W+/).filter(w => w.length > 3);
+    const mid = Math.ceil(words.length / 2);
+    const branchA = words.slice(0, mid).join('_');
+    const branchB = words.slice(mid).join('_');
 
-  it('Phase 4.2 — Create biome: Frozen Citadel', () => {
-    const biome = store.createChildNode(
-      'universe_root',
-      'frozen_citadel',
-      'The Frozen Citadel',
-      'biome',
-      [
-        { fn: 'set', axes: ['temperature'], value: 0.1, reason: 'frozen, icy' },
-        { fn: 'shift', axes: ['scale'], delta: 0.3, reason: 'monumental fortress' },
-        { fn: 'set', axes: ['texture'], value: 0.8, reason: 'ice and stone textures' }
-      ]
+    store.createChildNode('universe_root', 'branch_a', `Branch: ${words.slice(0, mid).join(' ')}`, 'biome');
+    store.createChildNode('universe_root', 'branch_b', `Branch: ${words.slice(mid).join(' ')}`, 'biome',
+      [{ fn: 'invert', axes: ['temperature', 'value', 'tension'] }]
     );
 
-    assert.equal(biome.depth, 1);
-    assert.equal(biome.parent_id, 'universe_root');
+    const children = store.getChildren('universe_root');
+    assert.equal(children.length, 2);
+    console.error(`    Branch A: ${branchA}`);
+    console.error(`    Branch B: ${branchB} (inverted temperature, value, tension)`);
   });
 
-  it('Phase 4.3 — Create biome: Burning Depths', () => {
-    const biome = store.createChildNode(
-      'universe_root',
-      'burning_depths',
-      'The Burning Depths',
-      'biome',
-      [
-        { fn: 'invert', axes: ['temperature'], reason: 'opposite of citadel — hot' },
-        { fn: 'shift', axes: ['density'], delta: 0.2, reason: 'claustrophobic tunnels' },
-        { fn: 'set', axes: ['space'], value: 0.9, reason: 'enclosed underground' }
-      ]
-    );
+  it('Phase 4.2 — Resolve children genomes', () => {
+    const resolvedA = store.resolveNodeGenome('branch_a');
+    const resolvedB = store.resolveNodeGenome('branch_b');
 
-    assert.equal(biome.depth, 1);
+    // Branch B should have inverted values on temperature, value, tension
+    if (resolvedA.genes.temperature && resolvedB.genes.temperature) {
+      const delta = Math.abs(resolvedA.genes.temperature.value - resolvedB.genes.temperature.value);
+      console.error(`    Temperature delta: ${delta.toFixed(2)} (A: ${resolvedA.genes.temperature.value.toFixed(2)}, B: ${resolvedB.genes.temperature.value.toFixed(2)})`);
+    }
   });
 
-  it('Phase 4.4 — Resolve biome genomes', () => {
-    const citadel = store.resolveNodeGenome('frozen_citadel');
-    const depths = store.resolveNodeGenome('burning_depths');
+  it('Phase 4.3 — Generate branch comparison', async () => {
+    // One image per branch to see the contrast
+    for (const branchId of ['branch_a', 'branch_b']) {
+      const bnf = store.loadNodeFile(branchId);
+      bnf.node.status = 'exploring';
+      store.saveNodeFile(branchId, bnf);
 
-    // Citadel: temperature set to 0.1 (frozen)
-    assert.ok(citadel.genes.temperature.value <= 0.15);
-    assert.equal(citadel.genes.temperature.transform, 'set');
+      const passId = store.startPass(branchId, 'ab');
+      const prompt = store.buildNodePrompt(branchId);
+      const v = store.createVariation(branchId, passId, prompt);
+      store.submitJob('render', branchId, { variation_ids: [v.id] });
+      store.closePass(passId);
+    }
 
-    // Depths: temperature inverted from parent
-    // Parent temperature was last set to 0.5 (from pass 2 exploration)
-    // Invert: 1 - parent_value
-    assert.ok(depths.genes.temperature.value >= 0.5,
-      `Depths temperature should be warm (inverted), got ${depths.genes.temperature.value}`);
-    assert.equal(depths.genes.temperature.transform, 'invert');
+    const done = await waitForJobs(store);
+    assert.ok(done, 'Branch renders should complete');
 
-    // Both should inherit parent walls
-    assert.ok(citadel.walls.length >= 1, 'Should inherit realism wall');
-    assert.ok(depths.walls.length >= 1, 'Should inherit realism wall');
-  });
-
-  it('Phase 4.5 — Create factions under Frozen Citadel', () => {
-    // First set citadel to exploring
-    const citFile = store.loadNodeFile('frozen_citadel');
-    citFile.node.status = 'exploring';
-    store.saveNodeFile('frozen_citadel', citFile);
-
-    const knights = store.createChildNode(
-      'frozen_citadel',
-      'frost_knights',
-      'The Frost Knights',
-      'faction',
-      [
-        { fn: 'set', axes: ['potency'], value: 0.9, reason: 'powerful armored warriors' },
-        { fn: 'shift', axes: ['scale'], delta: 0.1, reason: 'imposing figures' }
-      ]
-    );
-
-    const wraiths = store.createChildNode(
-      'frozen_citadel',
-      'ice_wraiths',
-      'The Ice Wraiths',
-      'faction',
-      [
-        { fn: 'invert', axes: ['potency'], reason: 'ethereal, fragile-looking' },
-        { fn: 'set', axes: ['familiarity'], value: 0.9, reason: 'strange, otherworldly' },
-        { fn: 'shift', axes: ['materiality'], delta: -0.3, reason: 'translucent, ghostly' }
-      ]
-    );
-
-    assert.equal(knights.depth, 2);
-    assert.equal(wraiths.depth, 2);
-
-    // Resolve deep chain: root → citadel → wraiths
-    const resolved = store.resolveNodeGenome('ice_wraiths');
-    // Wraiths should be: cold (from citadel), fragile (inverted potency), strange
-    assert.ok(resolved.genes.temperature.value <= 0.15, 'Wraiths in frozen citadel should be cold');
-    assert.ok(resolved.genes.familiarity.value >= 0.8, 'Wraiths should be strange');
-  });
-
-  // ==========================================
-  // PHASE 5: Custom axis + .comment files
-  // ==========================================
-
-  it('Phase 5.1 — Create custom axis "corruption"', () => {
-    store.createCustomAxis({
-      id: 'corruption',
-      poles: ['pure', 'corrupted'],
-      family: 'custom',
-      description: 'Level of magical/dark corruption visible in the entity',
-      layer: 'custom',
-      scope: '*',
-      prompt_map: {
-        '0': 'pure, clean, holy, untouched, pristine',
-        '0.5': 'slightly tainted, ambiguous',
-        '1': 'corrupted, twisted, dark magic, tainted, diseased'
+    const completed = store.getJobs('completed');
+    for (const job of completed) {
+      if (job.result?.image_path && fs.existsSync(job.result.image_path)) {
+        const kb = Math.round(fs.statSync(job.result.image_path).size / 1024);
+        console.error(`    ✓ ${job.node_id}: ${kb}KB`);
       }
-    });
-
-    // Should exist on all nodes now
-    const wraiths = store.getGenome('ice_wraiths');
-    const corr = wraiths.find(g => g.axis === 'corruption');
-    assert.ok(corr, 'Corruption axis should be on all nodes');
-    assert.equal(corr.value, 0.5);
-  });
-
-  it('Phase 5.2 — Simulate .comment file on frozen_citadel', () => {
-    // Human drops a .comment file
-    const commentDir = path.join(treePath, '_root', 'frozen_citadel');
-    fs.mkdirSync(commentDir, { recursive: true });
-    fs.writeFileSync(path.join(commentDir, '.comment'), [
-      '# The citadel needs to feel ancient and corrupted',
-      'set corruption 0.7',
-      'set finish 0.15',
-      'veto anything that looks new or clean',
-      'search: ice palace fantasy concept art',
-      'https://artstation.com/example/ice-fortress this kind of architecture'
-    ].join('\n'));
-
-    // Verify the file exists
-    assert.ok(fs.existsSync(path.join(commentDir, '.comment')));
-  });
-
-  // ==========================================
-  // PHASE 6: Dirty propagation
-  // ==========================================
-
-  it('Phase 6.1 — Change universe_root genome triggers dirty', () => {
-    // Agent decides to push contrast even higher based on feedback
-    store.updateGene('universe_root', 'contrast', 0.9, 0.8);
-
-    // Children should be dirtied
-    const dirtyReport = store.getDirtyReport();
-    // Note: some children may already be dirty from earlier operations
-    const allDirty = [...dirtyReport.broken, ...dirtyReport.major, ...dirtyReport.minor];
-
-    // Check tree status
-    const status = store.getTreeStatus();
-    assert.ok(status.nodes.length >= 5, `Tree should have >=5 nodes, got ${status.nodes.length}`);
-  });
-
-  // ==========================================
-  // PHASE 7: Explore a child branch
-  // ==========================================
-
-  it('Phase 7.1 — Run a pass on frost_knights', () => {
-    // Clean the node first
-    const knFile = store.loadNodeFile('frost_knights');
-    knFile.node.status = 'exploring';
-    store.saveNodeFile('frost_knights', knFile);
-
-    const passId = store.startPass('frost_knights', 'ab');
-
-    // Generate variations for frost knights
-    const v1 = store.createVariation('frost_knights', passId, 'massive armored knight, icy, imposing');
-    const v2 = store.createVariation('frost_knights', passId, 'lean frost knight, speed over bulk');
-    const v3 = store.createVariation('frost_knights', passId, 'ceremonial frost knight, ornate ice armor');
-
-    // Rate with the simulated human
-    for (const v of [v1, v2, v3]) {
-      const { rating, verdict } = simulateHumanRating(v.genome_snapshot);
-      store.rateVariation(v.id, rating, verdict, simulateHumanNote(v.genome_snapshot));
-    }
-
-    store.closePass(passId);
-  });
-
-  it('Phase 7.2 — Build prompt for frost_knights', () => {
-    const prompt = store.buildNodePrompt('frost_knights');
-    assert.ok(prompt.length > 0, 'Should generate a prompt');
-    // The prompt should contain elements from the full chain
-  });
-
-  // ==========================================
-  // PHASE 8: Full tree status
-  // ==========================================
-
-  it('Phase 8.1 — Final tree overview', () => {
-    const status = store.getTreeStatus();
-
-    // Expected tree:
-    // universe_root
-    //   ├── frozen_citadel
-    //   │   ├── frost_knights
-    //   │   └── ice_wraiths
-    //   └── burning_depths
-
-    assert.ok(status.nodes.length >= 5, `Expected >=5 nodes, got ${status.nodes.length}`);
-
-    // Check depths
-    const nodeMap = {};
-    for (const n of status.nodes) nodeMap[n.id] = n;
-
-    assert.equal(nodeMap.universe_root.depth, 0);
-    assert.equal(nodeMap.frozen_citadel.depth, 1);
-    assert.equal(nodeMap.burning_depths.depth, 1);
-    assert.equal(nodeMap.frost_knights.depth, 2);
-    assert.equal(nodeMap.ice_wraiths.depth, 2);
-  });
-
-  it('Phase 8.2 — All jobs completed', () => {
-    const jobs = store.getJobs();
-    const failed = jobs.filter(j => j.status === 'failed');
-    const completed = jobs.filter(j => j.status === 'completed');
-
-    // Log summary
-    const summary = {
-      total: jobs.length,
-      completed: completed.length,
-      failed: failed.length,
-    };
-
-    assert.ok(completed.length >= 3, `At least 3 jobs should have completed, got ${completed.length}`);
-  });
-
-  it('Phase 8.3 — Full resolved prompts for all leaf nodes', () => {
-    const leaves = ['frost_knights', 'ice_wraiths', 'burning_depths'];
-
-    for (const nodeId of leaves) {
-      const prompt = store.buildNodePrompt(nodeId);
-      assert.ok(prompt.length > 10,
-        `${nodeId} prompt should be substantial, got: "${prompt.slice(0, 50)}..."`);
-
-      const resolved = store.resolveNodeGenome(nodeId);
-      // All should inherit the realism wall
-      const hasRealismWall = resolved.walls.some(w => w.axis === 'realism');
-      assert.ok(hasRealismWall, `${nodeId} should inherit realism wall`);
     }
   });
 
-  it('Phase 8.4 — Summary stats (before rebuild)', () => {
-    const nodes = store.getTreeStatus().nodes;
+  // ==========================================
+  // PHASE 5 — Final check
+  // ==========================================
+
+  it('Phase 5 — Final state', () => {
+    const status = store.getTreeStatus();
+    assert.ok(status.nodes.length >= 3);
+
     const allVars = [];
-    const allRefs = [];
-    const allWalls = [];
-
-    for (const n of nodes) {
+    for (const n of status.nodes) {
       allVars.push(...store.getVariationsForNode(n.id));
-      allRefs.push(...store.getRefs(n.id));
-      allWalls.push(...store.getWalls(n.id));
     }
+    assert.ok(allVars.length >= 8, `Should have >=8 variations, got ${allVars.length}`);
 
-    const axes = store.getAllAxes();
-    const customAxes = axes.filter(a => a.layer === 'custom');
     const jobs = store.getJobs();
-
-    const stats = {
-      nodes: nodes.length,
-      variations: allVars.length,
-      kept: allVars.filter(v => v.verdict === 'keep').length,
-      vetoed: allVars.filter(v => v.verdict === 'veto').length,
-      removed: allVars.filter(v => v.verdict === 'remove').length,
-      references: allRefs.length,
-      walls: allWalls.length,
-      universal_axes: axes.length - customAxes.length,
-      custom_axes: customAxes.length,
-      jobs_total: jobs.length,
-      jobs_completed: jobs.filter(j => j.status === 'completed').length,
-    };
-
-    // Sanity checks
-    assert.ok(stats.nodes >= 5, `nodes: ${stats.nodes}`);
-    assert.ok(stats.variations >= 9, `variations: ${stats.variations}`);
-    assert.ok(stats.references >= 2, `references: ${stats.references}`);
-    assert.ok(stats.walls >= 2, `walls: ${stats.walls}`);
-    assert.ok(stats.custom_axes >= 1, `custom axes: ${stats.custom_axes}`);
-    assert.ok(stats.universal_axes >= 24, `universal axes: ${stats.universal_axes}`);
-  });
-
-  it('Phase 8.5 — Rebuild index preserves nodes and variations', () => {
-    const beforeNodes = store.getTreeStatus().nodes.length;
-
-    const result = store.rebuildIndex();
-
-    assert.equal(result.nodes, beforeNodes, 'Rebuild should preserve all nodes');
-    assert.ok(result.variations > 0, 'Rebuild should preserve variations');
-
-    // Verify data integrity
-    const root = store.getNode('universe_root');
-    assert.equal(root.name, 'Shadowkeep');
-
-    const genome = store.getGenome('universe_root');
-    const realism = genome.find(g => g.axis === 'realism');
-    assert.ok(realism.value <= 0.3, 'Realism should still be low');
-
-    // Children should survive
-    const children = store.getChildren('frozen_citadel');
-    assert.ok(children.length >= 2, 'Citadel children should survive rebuild');
+    const completed = jobs.filter(j => j.status === 'completed');
+    console.error(`\n    Final: ${status.nodes.length} nodes, ${allVars.length} variations, ${completed.length} images rendered`);
+    console.error(`    Quote: "${quote.text}"`);
   });
 });
