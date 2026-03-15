@@ -1,0 +1,24 @@
+{
+  "name": "aida",
+  "version": "0.1.0",
+  "description": "AIDA - Artistic Intelligence & Direction for Agents",
+  "type": "module",
+  "main": "dist/mcp/aida-server.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "node --test test/",
+    "mcp": "node dist/mcp/aida-server.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "better-sqlite3": "^11.0.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0"
+  }
+}

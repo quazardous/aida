@@ -1,0 +1,70 @@
+# AIDA - Artistic Intelligence & Direction for Agents
+# Project configuration
+
+# Path profile: default | split | haven | external
+paths_profile: default
+
+# Path overrides (uncomment as needed)
+# paths:
+#   art_dir: ../art             # separate art assets directory
+#   models_dir: /mnt/nas/models # shared models across projects
+
+# --- ENGINE (GPU generation backend) ---
+engine:
+  # Backend type
+  backend: comfyui              # comfyui | forge | cloud | mock
+
+  # API connection
+  api_url: http://localhost:8188
+  # api_key: ""                 # for cloud backends
+
+  # Default generation parameters
+  default_model: flux-dev
+  default_steps: 25
+  default_cfg: 7.0
+  default_sampler: euler
+  default_scheduler: normal
+  default_width: 1024
+  default_height: 1024
+
+  # Variation generation
+  batch_size: 3                 # variations per pass per node
+  seed_mode: random             # random | incremental | fixed
+  # fixed_seed: 42
+
+# --- TREE ---
+tree:
+  min_variations: 3             # minimum variations before validation possible
+  max_variations_per_pass: 8    # max variations generated in a single pass
+  auto_clean: true              # auto-clean dirty:minor nodes
+  convergence_threshold: 0.8    # confidence threshold for auto-validation proposal
+  surprise_variation: true      # add a "surprise" variation to avoid premature convergence
+
+# --- AXES ---
+axes:
+  universal_file: axes/universal.yaml
+  custom_file: axes/custom.yaml
+
+# --- REVIEW ---
+review:
+  format: comment               # comment | yaml
+  watch: false                  # watch .comment files for changes (future)
+
+# --- GENOME ---
+genome:
+  # Confidence adjustments per verdict
+  confidence_delta:
+    keep: 0.15
+    remove: 0.10
+    veto: 0.25
+    rework: 0.05
+  # Shift amplitude by confidence level
+  shift_amplitude:
+    low: 0.20                   # confidence < 0.3 -> explore widely
+    medium: 0.10                # confidence 0.3-0.7
+    high: 0.05                  # confidence > 0.7 -> fine-tune
+
+# --- DIRTY ---
+dirty:
+  auto_propagate: true          # auto-propagate dirty to children on genome change
+  snapshot_before_dirty: true   # create snapshot before dirtying a subtree

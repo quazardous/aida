@@ -1,0 +1,234 @@
+# AIDA - Universal Axes Definition
+# Based on: Arnheim (visual perception), Osgood (semantic differential),
+#           Berlyne (experimental aesthetics), Itten (color theory)
+#
+# Each axis is bipolar, normalized [0, 1].
+# pole_low = value 0.0, pole_high = value 1.0
+
+families:
+
+  # ===================================================================
+  # STRUCTURE — Arnheim: form, balance, space
+  # ===================================================================
+  structure:
+    description: "Formal spatial and geometric properties"
+    axes:
+      - id: forme
+        poles: [géométrique, organique]
+        description: "Shape language: angular/constructed vs curved/natural"
+        prompt_map:
+          0.0: "geometric, angular, sharp edges, constructed, polygonal"
+          0.5: "mixed shapes, semi-organic"
+          1.0: "organic, curved, flowing, natural forms, biomorphic"
+
+      - id: complexité
+        poles: [minimal, élaboré]
+        description: "Level of detail and ornamentation"
+        prompt_map:
+          0.0: "minimal, simple, clean, uncluttered, bare"
+          0.5: "moderate detail, some ornamentation"
+          1.0: "elaborate, intricate, ornate, highly detailed, complex"
+
+      - id: espace
+        poles: [ouvert, fermé]
+        description: "Spatial feel: airy/expansive vs enclosed/tight"
+        prompt_map:
+          0.0: "open space, vast, expansive, airy, wide"
+          0.5: "balanced space"
+          1.0: "enclosed, tight, claustrophobic, confined, dense"
+
+      - id: balance
+        poles: [symétrique, asymétrique]
+        description: "Compositional balance"
+        prompt_map:
+          0.0: "symmetrical, centered, balanced, ordered"
+          0.5: "mostly balanced, slight asymmetry"
+          1.0: "asymmetrical, off-center, dynamic composition, unbalanced"
+
+      - id: échelle
+        poles: [intime, monumental]
+        description: "Perceived scale and grandeur"
+        prompt_map:
+          0.0: "intimate, small-scale, personal, cozy"
+          0.5: "human scale"
+          1.0: "monumental, grand, imposing, massive, epic scale"
+
+      - id: densité
+        poles: [épuré, dense]
+        description: "Visual density and information load"
+        prompt_map:
+          0.0: "sparse, clean, minimal elements, breathing room"
+          0.5: "moderate density"
+          1.0: "dense, packed, busy, layered, information-rich"
+
+  # ===================================================================
+  # COLOR — Itten: 7 color contrasts
+  # ===================================================================
+  color:
+    description: "Chromatic properties based on Itten's color theory"
+    axes:
+      - id: valeur
+        poles: [clair, sombre]
+        description: "Overall lightness/darkness"
+        prompt_map:
+          0.0: "bright, light, high-key, luminous, white"
+          0.5: "mid-tones, balanced lighting"
+          1.0: "dark, shadowy, low-key, murky, black"
+
+      - id: saturation
+        poles: [désaturé, saturé]
+        description: "Color intensity/purity"
+        prompt_map:
+          0.0: "desaturated, muted, greyscale, washed out, monochrome"
+          0.5: "moderate saturation"
+          1.0: "saturated, vibrant, vivid, bold colors, intense"
+
+      - id: température
+        poles: [froid, chaud]
+        description: "Color temperature"
+        prompt_map:
+          0.0: "cool colors, blue, teal, icy, cold"
+          0.5: "neutral temperature"
+          1.0: "warm colors, orange, amber, golden, hot"
+
+      - id: contraste
+        poles: [faible, fort]
+        description: "Contrast between light and dark areas"
+        prompt_map:
+          0.0: "low contrast, flat, even lighting, soft"
+          0.5: "moderate contrast"
+          1.0: "high contrast, dramatic lighting, chiaroscuro, stark"
+
+      - id: palette
+        poles: [monochrome, polychrome]
+        description: "Color variety"
+        prompt_map:
+          0.0: "monochromatic, single hue, tonal"
+          0.5: "limited palette, analogous colors"
+          1.0: "polychromatic, many colors, rainbow, diverse palette"
+
+      - id: dominante
+        type: hue_angle
+        range: [0, 360]
+        description: "Dominant hue angle (0=red, 60=yellow, 120=green, 180=cyan, 240=blue, 300=magenta)"
+        prompt_map:
+          0: "red dominant"
+          60: "yellow dominant"
+          120: "green dominant"
+          180: "cyan dominant"
+          240: "blue dominant"
+          300: "magenta dominant"
+
+  # ===================================================================
+  # PERCEPTION — Berlyne: collative variables + Arnheim: dynamics
+  # ===================================================================
+  perception:
+    description: "How the image is perceived and experienced"
+    axes:
+      - id: familiarité
+        poles: [familier, étrange]
+        description: "Novelty/familiarity — Berlyne's collative variable"
+        prompt_map:
+          0.0: "familiar, conventional, recognizable, normal"
+          0.5: "somewhat unusual"
+          1.0: "strange, surreal, uncanny, alien, bizarre, otherworldly"
+
+      - id: tension
+        poles: [calme, tendu]
+        description: "Visual tension and energy"
+        prompt_map:
+          0.0: "calm, serene, peaceful, relaxed, tranquil"
+          0.5: "moderate energy"
+          1.0: "tense, aggressive, chaotic, intense, dramatic"
+
+      - id: mouvement
+        poles: [statique, dynamique]
+        description: "Implied motion and dynamism"
+        prompt_map:
+          0.0: "static, still, frozen, posed, stable"
+          0.5: "slight movement"
+          1.0: "dynamic, motion, action, kinetic, flowing"
+
+      - id: lisibilité
+        poles: [ambigu, lisible]
+        description: "Clarity of visual communication"
+        prompt_map:
+          0.0: "ambiguous, abstract, unclear, layered meaning"
+          0.5: "semi-readable"
+          1.0: "clear, readable, obvious, graphic, iconic"
+
+  # ===================================================================
+  # SEMANTIC — Osgood EPA dimensions
+  # ===================================================================
+  semantic:
+    description: "Subjective meaning — Osgood's Evaluation/Potency/Activity"
+    axes:
+      - id: évaluation
+        poles: [repoussant, attirant]
+        description: "Osgood E: good-bad, attractive-repulsive"
+        prompt_map:
+          0.0: "ugly, repulsive, disturbing, grotesque"
+          0.5: "neutral"
+          1.0: "beautiful, attractive, appealing, elegant"
+
+      - id: puissance
+        poles: [fragile, puissant]
+        description: "Osgood P: strong-weak"
+        prompt_map:
+          0.0: "fragile, delicate, light, ethereal, weak"
+          0.5: "moderate"
+          1.0: "powerful, strong, heavy, solid, imposing"
+
+      - id: activité
+        poles: [passif, actif]
+        description: "Osgood A: active-passive"
+        prompt_map:
+          0.0: "passive, still, dormant, inert"
+          0.5: "moderate activity"
+          1.0: "active, energetic, lively, animated"
+
+  # ===================================================================
+  # RENDERING — generation-specific dimensions
+  # ===================================================================
+  rendering:
+    description: "Technical rendering properties for image generation"
+    axes:
+      - id: réalisme
+        poles: [abstrait, photoréaliste]
+        description: "Level of representational fidelity"
+        prompt_map:
+          0.0: "abstract, non-representational, conceptual"
+          0.5: "stylized, semi-realistic, illustrated"
+          1.0: "photorealistic, hyperrealistic, photograph"
+
+      - id: trait
+        poles: [fin, épais]
+        description: "Line weight and stroke quality"
+        prompt_map:
+          0.0: "thin lines, fine detail, delicate strokes, hairline"
+          0.5: "medium strokes"
+          1.0: "thick lines, bold strokes, chunky, heavy outlines"
+
+      - id: texture
+        poles: [lisse, texturé]
+        description: "Surface texture quality"
+        prompt_map:
+          0.0: "smooth, clean, polished, glossy"
+          0.5: "some texture"
+          1.0: "textured, rough, gritty, grainy, tactile"
+
+      - id: matérialité
+        poles: [plat, volumétrique]
+        description: "Sense of 3D volume and material presence"
+        prompt_map:
+          0.0: "flat, 2D, graphic, paper-like"
+          0.5: "slight depth"
+          1.0: "volumetric, 3D, sculptural, tangible, material"
+
+      - id: finition
+        poles: [brut, poli]
+        description: "Level of finish and polish"
+        prompt_map:
+          0.0: "raw, rough, unfinished, sketch-like, crude"
+          0.5: "semi-finished"
+          1.0: "polished, refined, clean, professional, finished"
