@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS nodes (
     status TEXT NOT NULL DEFAULT 'draft',
     path TEXT NOT NULL,
     depth INTEGER NOT NULL DEFAULT 0,
+    subject TEXT,
+    subject_detail TEXT,
     contrast_with TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -158,12 +160,20 @@ export class DbManager {
 
   createNode(node: AidaNode): void {
     this.db.prepare(`
-      INSERT INTO nodes (id, parent_id, type, name, status, path, depth, contrast_with, created_at, updated_at)
-      VALUES (@id, @parent_id, @type, @name, @status, @path, @depth, @contrast_with, @created_at, @updated_at)
+      INSERT INTO nodes (id, parent_id, type, name, status, path, depth, subject, subject_detail, contrast_with, created_at, updated_at)
+      VALUES (@id, @parent_id, @type, @name, @status, @path, @depth, @subject, @subject_detail, @contrast_with, @created_at, @updated_at)
     `).run({
       ...node,
+      subject: node.subject ?? null,
+      subject_detail: node.subject_detail ?? null,
       contrast_with: node.contrast_with ?? null
     });
+  }
+
+  updateNodeSubject(id: string, subject: string, subjectDetail?: string): void {
+    const now = new Date().toISOString();
+    this.db.prepare('UPDATE nodes SET subject = ?, subject_detail = ?, updated_at = ? WHERE id = ?')
+      .run(subject, subjectDetail ?? null, now, id);
   }
 
   getNode(id: string): AidaNode | null {

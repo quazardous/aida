@@ -223,6 +223,37 @@ export function createNodeTools(store: Store): ToolDefinition[] {
     },
     {
       tool: {
+        name: 'node_set_subject',
+        description: 'Set the subject of a node — WHAT it represents (not HOW it looks). Must be set before generating images. The subject is factual: "A massive stone cathedral carved into a cliff face" not "dark and gothic".',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', description: 'Node ID' },
+            subject: { type: 'string', description: 'Short factual description: what this entity IS' },
+            subject_detail: { type: 'string', description: 'Full description: materials, function, scale, context, inhabitants, history...' }
+          },
+          required: ['id', 'subject']
+        }
+      },
+      handler: (args) => {
+        const node = store.getNode(args.id);
+        if (!node) return err(`Node not found: ${args.id}`);
+
+        store.updateNodeSubject(args.id, args.subject, args.subject_detail);
+
+        return ok({
+          success: true,
+          data: {
+            node_id: args.id,
+            subject: args.subject,
+            subject_detail: args.subject_detail,
+            prompt_preview: store.buildNodePrompt(args.id)
+          }
+        });
+      }
+    },
+    {
+      tool: {
         name: 'node_set_status',
         description: 'Change node status (draft → exploring → validated → locked).',
         inputSchema: {

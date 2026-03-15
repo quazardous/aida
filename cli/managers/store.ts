@@ -383,11 +383,22 @@ export class Store {
 
   /**
    * Build a generation prompt from a node's resolved genome.
-   * Combines evocative text + weighted tokens for the image generator.
+   * Structure: [SUBJECT] + [STYLE evocations] + [WEIGHTED TOKENS]
+   *
+   * Without a subject, the prompt is style-only (abstract).
+   * With a subject, the prompt grounds the style in concrete content.
    */
   buildNodePrompt(nodeId: string, threshold: number = 0.2): string {
+    const node = this.db.getNode(nodeId);
     const resolved = this.resolveNodeGenome(nodeId);
-    return buildPromptFromGenome(resolved, this.getAxisPromptData(), threshold);
+    const stylePrompt = buildPromptFromGenome(resolved, this.getAxisPromptData(), threshold);
+
+    if (node?.subject) {
+      // Subject first (what), then style (how)
+      return `${node.subject}. ${node.subject_detail || ''}. ${stylePrompt}`.replace(/\.\s*\./g, '.').trim();
+    }
+
+    return stylePrompt;
   }
 
   /**
@@ -395,8 +406,30 @@ export class Store {
    * Evocative descriptions only — for human reading, not for the generator.
    */
   buildNodeMoodText(nodeId: string, threshold: number = 0.2): string {
+    const node = this.db.getNode(nodeId);
     const resolved = this.resolveNodeGenome(nodeId);
-    return buildMoodText(resolved, this.getAxisPromptData(), threshold);
+    const moodText = buildMoodText(resolved, this.getAxisPromptData(), threshold);
+
+    if (node?.subject) {
+      return `# ${node.name}\n${node.subject}\n${node.subject_detail || ''}\n\n## Mood\n${moodText}`;
+    }
+
+    return moodText;
+  }
+
+  /**
+   * Update a node's subject (what it IS, not how it looks).
+   */
+  updateNodeSubject(nodeId: string, subject: string, subjectDetail?: string): void {
+    this.db.updateNodeSubject(nodeId, subject, subjectDetail);
+
+    // Sync to YAML
+    const nodeFile = this.loadNodeFile(nodeId);
+    if (nodeFile) {
+      (nodeFile.node as any).subject = subject;
+      (nodeFile.node as any).subject_detail = subjectDetail || null;
+      this.saveNodeFile(nodeId, nodeFile);
+    }
   }
 
   /**

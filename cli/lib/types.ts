@@ -115,6 +115,11 @@ export interface AidaNode {
   path: string;                 // filesystem path relative to tree root
   depth: number;
 
+  // Subject — the factual description of WHAT this node represents
+  // This is NOT style — it's content. Combined with genome (style) for prompts.
+  subject?: string;             // short: "A massive stone cathedral carved into a cliff"
+  subject_detail?: string;      // full: materials, function, scale, context, inhabitants...
+
   // Relations
   contrast_with?: string;       // sibling node id
   coupled_axes?: { axis: string; coupling: 'mirror' }[];
