@@ -11,7 +11,7 @@ import { DbManager } from './db-manager.js';
 import { resolveGenome, buildPromptFromGenome } from '../lib/genome-resolver.js';
 import type { NodeGenomeData, ResolvedGenome } from '../lib/genome-resolver.js';
 import type {
-  AidaNode, Gene, Genome, Wall, Attractor, Variation, Pass, Reference,
+  AidaNode, Gene, Genome, Wall, Attractor, Variation, Pass, Reference, Job, JobType, JobStatus,
   NodeStatus, Verdict, Transform, AxisDef, Tweak, DirtyReport
 } from '../lib/types.js';
 
@@ -770,6 +770,62 @@ export class Store {
 
   removeRef(refId: string): void {
     this.db.deleteRef(refId);
+  }
+
+  // === JOBS ===
+
+  submitJob(type: JobType, nodeId: string, params: Record<string, any>): Job {
+    const now = new Date().toISOString();
+    const existing = this.db.getJobs(undefined, nodeId);
+    const jobNum = (existing.length + 1).toString().padStart(4, '0');
+    const jobId = `job_${type}_${jobNum}_${Date.now().toString(36)}`;
+
+    const job: Job = {
+      id: jobId,
+      type,
+      status: 'queued',
+      node_id: nodeId,
+      params,
+      result: null,
+      progress: 0,
+      error: null,
+      created_at: now,
+      started_at: null,
+      completed_at: null
+    };
+
+    this.db.createJob(job);
+    return job;
+  }
+
+  getJob(id: string): Job | null {
+    return this.db.getJob(id);
+  }
+
+  getJobs(status?: JobStatus, nodeId?: string): Job[] {
+    return this.db.getJobs(status, nodeId);
+  }
+
+  updateJobStatus(id: string, status: JobStatus, extra?: { progress?: number; error?: string; result?: Record<string, any> }): void {
+    this.db.updateJobStatus(id, status, extra);
+  }
+
+  getNextQueuedJob(): Job | null {
+    return this.db.getNextQueuedJob();
+  }
+
+  /**
+   * Collect job results: link completed job outputs to variations/nodes.
+   */
+  collectJobResults(jobId: string): { collected: boolean; message: string } {
+    const job = this.db.getJob(jobId);
+    if (!job) return { collected: false, message: `Job not found: ${jobId}` };
+    if (job.status !== 'completed') return { collected: false, message: `Job ${jobId} is not completed (status: ${job.status})` };
+
+    // Mark as collected
+    this.db.updateJobStatus(jobId, 'collected');
+
+    return { collected: true, message: `Job ${jobId} results collected` };
   }
 
   // === TREE STATUS ===

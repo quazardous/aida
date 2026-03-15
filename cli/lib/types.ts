@@ -174,6 +174,37 @@ export interface Reference {
   created_at: string;
 }
 
+// --- Job (persistent async GPU task) ---
+export type JobType =
+  | 'render'           // single image generation
+  | 'render_batch'     // batch generation (N images)
+  | 'style_extract'    // IP-Adapter style extraction
+  | 'lora_train'       // LoRA fine-tuning
+  | 'clip_embed'       // CLIP embedding computation
+  | 'upscale';         // image upscaling
+
+export type JobStatus =
+  | 'queued'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'collected';       // results have been integrated
+
+export interface Job {
+  id: string;
+  type: JobType;
+  status: JobStatus;
+  node_id: string;              // which node this job is for
+  params: Record<string, any>;  // job-specific parameters
+  result: Record<string, any> | null;  // output when completed
+  progress: number;             // 0-100
+  error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
 // --- Comment action (parsed from .comment file) ---
 export interface CommentAction {
   tool: string;

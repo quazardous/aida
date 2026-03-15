@@ -25,6 +25,7 @@ import { createCommentTools } from '../cli/mcp-tools/comment-tools.js';
 import { createGenerateTools } from '../cli/mcp-tools/generate-tools.js';
 import { createReferenceTools } from '../cli/mcp-tools/reference-tools.js';
 import { createMutationTools } from '../cli/mcp-tools/mutation-tools.js';
+import { createJobTools } from '../cli/mcp-tools/job-tools.js';
 import { createEngine } from '../cli/engine/index.js';
 import type { EngineConfig } from '../cli/engine/index.js';
 import type { ToolDefinition } from '../cli/mcp-tools/types.js';
@@ -99,7 +100,8 @@ async function main() {
     ...createCommentTools(store, treePath),
     ...createGenerateTools(store, engine, treePath),
     ...createReferenceTools(store),
-    ...createMutationTools(store)
+    ...createMutationTools(store),
+    ...createJobTools(store, engine, treePath)
   ];
 
   // Build handler map

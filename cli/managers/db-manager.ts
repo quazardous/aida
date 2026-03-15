@@ -5,7 +5,7 @@
  * The DB is a derived index that can be rebuilt from files.
  */
 import Database from 'better-sqlite3';
-import type { AidaNode, Gene, Wall, Attractor, Variation, Pass, Reference, NodeStatus, Verdict } from '../lib/types.js';
+import type { AidaNode, Gene, Wall, Attractor, Variation, Pass, Reference, Job, JobStatus, NodeStatus, Verdict } from '../lib/types.js';
 
 const SCHEMA_SQL = `
 -- Nodes
@@ -110,6 +110,22 @@ CREATE TABLE IF NOT EXISTS refs (
     FOREIGN KEY (node_id) REFERENCES nodes(id)
 );
 
+-- Jobs (persistent async GPU tasks)
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,             -- render, render_batch, lora_train, etc.
+    status TEXT NOT NULL DEFAULT 'queued',
+    node_id TEXT NOT NULL,
+    params TEXT NOT NULL,           -- JSON
+    result TEXT,                    -- JSON (when completed)
+    progress INTEGER NOT NULL DEFAULT 0,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    completed_at TEXT,
+    FOREIGN KEY (node_id) REFERENCES nodes(id)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_genome_node ON genome(node_id);
 CREATE INDEX IF NOT EXISTS idx_genome_axis ON genome(axis);
@@ -120,6 +136,8 @@ CREATE INDEX IF NOT EXISTS idx_refs_type ON refs(type);
 CREATE INDEX IF NOT EXISTS idx_walls_node ON walls(node_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+CREATE INDEX IF NOT EXISTS idx_jobs_node ON jobs(node_id);
 `;
 
 export class DbManager {
@@ -395,12 +413,89 @@ export class DbManager {
     this.db.prepare('DELETE FROM refs WHERE id = ?').run(id);
   }
 
+  // === JOBS ===
+
+  createJob(job: Job): void {
+    this.db.prepare(`
+      INSERT INTO jobs (id, type, status, node_id, params, result, progress, error, created_at, started_at, completed_at)
+      VALUES (@id, @type, @status, @node_id, @params, @result, @progress, @error, @created_at, @started_at, @completed_at)
+    `).run({
+      ...job,
+      params: JSON.stringify(job.params),
+      result: job.result ? JSON.stringify(job.result) : null,
+      started_at: job.started_at ?? null,
+      completed_at: job.completed_at ?? null
+    });
+  }
+
+  getJob(id: string): Job | null {
+    const row = this.db.prepare('SELECT * FROM jobs WHERE id = ?').get(id) as any ?? null;
+    if (!row) return null;
+    return {
+      ...row,
+      params: JSON.parse(row.params),
+      result: row.result ? JSON.parse(row.result) : null
+    };
+  }
+
+  getJobs(status?: JobStatus, nodeId?: string): Job[] {
+    let sql = 'SELECT * FROM jobs WHERE 1=1';
+    const params: unknown[] = [];
+    if (status) { sql += ' AND status = ?'; params.push(status); }
+    if (nodeId) { sql += ' AND node_id = ?'; params.push(nodeId); }
+    sql += ' ORDER BY created_at DESC';
+    const rows = this.db.prepare(sql).all(...params) as any[];
+    return rows.map(r => ({
+      ...r,
+      params: JSON.parse(r.params),
+      result: r.result ? JSON.parse(r.result) : null
+    }));
+  }
+
+  updateJobStatus(id: string, status: JobStatus, extra?: { progress?: number; error?: string; result?: Record<string, any> }): void {
+    const now = new Date().toISOString();
+    let sql = 'UPDATE jobs SET status = ?';
+    const params: unknown[] = [status];
+
+    if (status === 'running') {
+      sql += ', started_at = ?';
+      params.push(now);
+    }
+    if (status === 'completed' || status === 'failed') {
+      sql += ', completed_at = ?';
+      params.push(now);
+    }
+    if (extra?.progress !== undefined) {
+      sql += ', progress = ?';
+      params.push(extra.progress);
+    }
+    if (extra?.error !== undefined) {
+      sql += ', error = ?';
+      params.push(extra.error);
+    }
+    if (extra?.result !== undefined) {
+      sql += ', result = ?';
+      params.push(JSON.stringify(extra.result));
+    }
+
+    sql += ' WHERE id = ?';
+    params.push(id);
+    this.db.prepare(sql).run(...params);
+  }
+
+  getNextQueuedJob(): Job | null {
+    const row = this.db.prepare("SELECT * FROM jobs WHERE status = 'queued' ORDER BY created_at ASC LIMIT 1").get() as any ?? null;
+    if (!row) return null;
+    return { ...row, params: JSON.parse(row.params), result: row.result ? JSON.parse(row.result) : null };
+  }
+
   // === QUERIES ===
 
   /**
    * Clear all data (for rebuild)
    */
   clearAll(): void {
+    this.db.exec('DELETE FROM jobs');
     this.db.exec('DELETE FROM comments');
     this.db.exec('DELETE FROM passes');
     this.db.exec('DELETE FROM refs');

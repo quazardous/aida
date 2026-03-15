@@ -52,8 +52,16 @@ You have access to the `aida-tree` MCP server with these tools:
 
 ### Generation
 - `generate_variations` — resolve genome, build prompts, create N variation records
-- `generate_render` — render variation images using configured engine (ComfyUI/Forge/mock)
+- `generate_render` — submit render job (returns immediately, use job_status to track)
 - `generate_prompt_preview` — preview prompt from current genome without generating
+
+### Jobs (persistent async tasks)
+- `job_submit` — submit any async job (render, lora_train, style_extract, etc.)
+- `job_status` — check job progress (works across sessions)
+- `job_list` — list all jobs, filter by status/node (essential for session resume)
+- `job_cancel` — cancel a queued/running job
+- `job_collect` — integrate completed job results into the tree
+- `job_retry` — re-queue a failed job
 
 ### References & Research
 - `ref_add` — attach a reference (URL, image, search result, note) to a node
@@ -148,7 +156,17 @@ After each pass, check `pass_status`:
 - If uncertain axes remain, start next pass focused on those axes
 - If rating spread is still high, continue exploring
 
-### 6. Handle .comment Files
+### 6. Session Resume
+When starting a new session (or if you have no memory of prior work), always:
+1. Call `tree_status` to understand the current state
+2. Call `job_list` to check for completed/failed/running jobs
+3. Call `comment_pending` to check for new .comment files
+4. For any completed jobs: call `job_collect` to integrate results
+5. For any failed jobs: inform the user and propose `job_retry`
+
+This ensures no work is lost between sessions. Jobs persist in SQLite independently of the agent's context.
+
+### 7. Handle .comment Files
 Periodically check `comment_pending`. When found:
 1. Call `comment_process` to parse actions
 2. Review the parsed actions with the user

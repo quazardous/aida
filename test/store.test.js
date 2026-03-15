@@ -355,3 +355,95 @@ describe('Store - Tree Status', () => {
     assert.equal(noResults.length, 0);
   });
 });
+
+describe('Store - Jobs', () => {
+  let store, tmpDir;
+
+  before(() => {
+    ({ store, tmpDir } = createTempStore());
+    store.initUniverseRoot('Job Test');
+  });
+  after(() => {
+    store.close();
+    cleanupTemp(tmpDir);
+  });
+
+  it('should submit a job', () => {
+    const job = store.submitJob('render', 'universe_root', {
+      variation_ids: ['v001'],
+      negative_prompt: 'blurry'
+    });
+    assert.ok(job.id.startsWith('job_render_'));
+    assert.equal(job.status, 'queued');
+    assert.equal(job.node_id, 'universe_root');
+    assert.equal(job.progress, 0);
+    assert.deepEqual(job.params.variation_ids, ['v001']);
+  });
+
+  it('should list jobs', () => {
+    const jobs = store.getJobs();
+    assert.equal(jobs.length, 1);
+
+    const queued = store.getJobs('queued');
+    assert.equal(queued.length, 1);
+
+    const running = store.getJobs('running');
+    assert.equal(running.length, 0);
+  });
+
+  it('should update job status with progress', () => {
+    const jobs = store.getJobs();
+    const jobId = jobs[0].id;
+
+    store.updateJobStatus(jobId, 'running', { progress: 30 });
+    const running = store.getJob(jobId);
+    assert.equal(running.status, 'running');
+    assert.equal(running.progress, 30);
+    assert.ok(running.started_at);
+  });
+
+  it('should complete job with result', () => {
+    const jobs = store.getJobs('running');
+    const jobId = jobs[0].id;
+
+    store.updateJobStatus(jobId, 'completed', {
+      progress: 100,
+      result: { image_path: '/tmp/output.png', seed: 42 }
+    });
+
+    const completed = store.getJob(jobId);
+    assert.equal(completed.status, 'completed');
+    assert.equal(completed.progress, 100);
+    assert.ok(completed.completed_at);
+    assert.equal(completed.result.seed, 42);
+  });
+
+  it('should collect job results', () => {
+    const jobs = store.getJobs('completed');
+    const result = store.collectJobResults(jobs[0].id);
+    assert.equal(result.collected, true);
+
+    const collected = store.getJob(jobs[0].id);
+    assert.equal(collected.status, 'collected');
+  });
+
+  it('should persist across getJob calls (simulates session resume)', () => {
+    // Submit another job
+    const job = store.submitJob('lora_train', 'universe_root', {
+      base_model: 'flux-dev', steps: 1000, lr: 0.0001
+    });
+
+    // "Simulate session break" — just get the job by ID
+    const retrieved = store.getJob(job.id);
+    assert.equal(retrieved.type, 'lora_train');
+    assert.equal(retrieved.status, 'queued');
+    assert.equal(retrieved.params.steps, 1000);
+  });
+
+  it('should get next queued job', () => {
+    const next = store.getNextQueuedJob();
+    assert.ok(next);
+    assert.equal(next.status, 'queued');
+    assert.equal(next.type, 'lora_train');
+  });
+});

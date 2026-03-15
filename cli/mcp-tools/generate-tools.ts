@@ -172,7 +172,7 @@ export function createGenerateTools(store: Store, engine: Engine, treePath: stri
     {
       tool: {
         name: 'generate_render',
-        description: 'Render variation images using the configured engine. Call after generate_variations.',
+        description: 'Submit a render job for variation images. Returns immediately with a job_id — use job_status to track progress.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -186,60 +186,46 @@ export function createGenerateTools(store: Store, engine: Engine, treePath: stri
           required: ['variation_ids']
         }
       },
-      handler: async (args) => {
-        const results: Array<{ id: string; success: boolean; path?: string; error?: string }> = [];
-
+      handler: (args) => {
+        // Find the node for these variations
+        let nodeId: string | null = null;
         for (const varId of args.variation_ids) {
-          // Find variation
           const allNodes = store.getTreeStatus().nodes;
-          let variation = null;
-          let node = null;
-
           for (const n of allNodes) {
             const vars = store.getVariationsForNode(n.id);
-            const v = vars.find(v => v.id === varId);
-            if (v) {
-              variation = v;
-              node = n;
+            if (vars.find(v => v.id === varId)) {
+              nodeId = n.id;
               break;
             }
           }
-
-          if (!variation || !node) {
-            results.push({ id: varId, success: false, error: 'Variation not found' });
-            continue;
-          }
-
-          const outputPath = path.join(treePath, node.path, 'variations', varId, 'main.png');
-
-          try {
-            const result = await engine.generate({
-              prompt: variation.prompt_used || '',
-              negative_prompt: args.negative_prompt,
-            }, outputPath);
-
-            results.push({
-              id: varId,
-              success: result.success,
-              path: result.image_path,
-              error: result.error
-            });
-          } catch (e: any) {
-            results.push({ id: varId, success: false, error: e.message });
-          }
+          if (nodeId) break;
         }
 
+        if (!nodeId) return err('No valid variations found');
+
+        // Submit as a job instead of blocking
+        const job = store.submitJob(
+          args.variation_ids.length > 1 ? 'render_batch' : 'render',
+          nodeId,
+          {
+            variation_ids: args.variation_ids,
+            negative_prompt: args.negative_prompt
+          }
+        );
+
         return ok({
-          success: results.every(r => r.success),
+          success: true,
           data: {
-            rendered: results.filter(r => r.success).length,
-            failed: results.filter(r => !r.success).length,
-            results
+            job_id: job.id,
+            type: job.type,
+            status: 'queued',
+            variation_count: args.variation_ids.length,
+            message: `Render job ${job.id} queued. Use job_status to track progress.`
           },
           next_actions: [{
-            tool: 'variation_list',
-            args: { node_id: results[0]?.id?.split('_p')[0] || 'universe_root' },
-            reason: 'View all variations for rating',
+            tool: 'job_status',
+            args: { id: job.id },
+            reason: 'Check render progress',
             priority: 'normal'
           }]
         });
