@@ -25,8 +25,19 @@ build:
 check:
 	npx tsc --noEmit
 
-# Test (build first)
+# Test — unit + e2e (no GPU required)
 test: build
+	node --test test/store.test.js test/genome-resolver.test.js test/e2e.test.js test/job-worker.test.js
+
+# Test — in-vitro with real GPU (requires ComfyUI/Forge running)
+# Usage: make test-gpu
+#        AIDA_ENGINE_URL=http://host:port make test-gpu
+#        AIDA_ENGINE_MODEL=sdxl make test-gpu
+test-gpu: build
+	node --test test/in-vitro.test.js
+
+# Test — all (unit + e2e + gpu if available)
+test-all: build
 	node --test test/*.test.js
 
 # Watch mode: rebuild + retest on .ts changes

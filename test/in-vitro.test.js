@@ -22,7 +22,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { Store } from '../dist/cli/managers/store.js';
-import { MockEngine } from '../dist/cli/engine/mock-engine.js';
+import { createEngine } from '../dist/cli/engine/index.js';
 import { JobWorker } from '../dist/cli/engine/job-worker.js';
 
 // --- Simulated Human Preferences ---
@@ -83,6 +83,19 @@ function simulateHumanNote(genomeSnapshot) {
   return complaints.length > 0 ? complaints.join(', ') : 'looks good';
 }
 
+// Engine config — reads from AIDA_ENGINE_URL env or defaults to localhost ComfyUI
+const ENGINE_URL = process.env.AIDA_ENGINE_URL || 'http://localhost:8188';
+const ENGINE_MODEL = process.env.AIDA_ENGINE_MODEL || 'flux-dev';
+
+async function checkGpuAvailable() {
+  try {
+    const res = await fetch(`${ENGINE_URL}/system_stats`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 function createTestEnv() {
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aida-invitro-'));
   const treePath = path.join(tmpDir, 'tree');
@@ -97,8 +110,21 @@ function createTestEnv() {
   );
 
   const store = new Store({ treePath, dbPath, axesPath });
-  const engine = new MockEngine();
-  const worker = new JobWorker(store, engine, treePath, { pollIntervalMs: 50 });
+  const engine = createEngine({
+    backend: 'comfyui',
+    api_url: ENGINE_URL,
+    default_model: ENGINE_MODEL,
+    default_steps: 20,
+    default_cfg: 7.0,
+    default_sampler: 'euler',
+    default_scheduler: 'normal',
+    default_width: 512,       // smaller for faster test iterations
+    default_height: 512,
+    batch_size: 3,
+    seed_mode: 'random'
+  });
+  // Longer poll interval — real GPU takes seconds
+  const worker = new JobWorker(store, engine, treePath, { pollIntervalMs: 1000 });
 
   return { store, engine, worker, tmpDir, treePath };
 }
@@ -107,14 +133,14 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-// Wait for all jobs to complete
-async function waitForJobs(store, timeout = 5000) {
+// Wait for all jobs to complete — longer timeout for real GPU
+async function waitForJobs(store, timeout = 120000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     const queued = store.getJobs('queued');
     const running = store.getJobs('running');
     if (queued.length === 0 && running.length === 0) return true;
-    await sleep(50);
+    await sleep(1000);
   }
   return false;
 }
@@ -122,14 +148,24 @@ async function waitForJobs(store, timeout = 5000) {
 describe('In-Vitro — Autonomous AIDA Simulation', () => {
   let store, engine, worker, tmpDir, treePath;
 
-  before(() => {
+  before(async () => {
+    // GATE: GPU must be available — no fallback
+    const gpuAvailable = await checkGpuAvailable();
+    if (!gpuAvailable) {
+      console.error(`\n  ⚠ GPU engine not available at ${ENGINE_URL}`);
+      console.error(`    Start ComfyUI/Forge, or set AIDA_ENGINE_URL=http://host:port`);
+      console.error(`    Skipping in-vitro test.\n`);
+      process.exit(0);
+    }
+    console.error(`  ✓ GPU engine available at ${ENGINE_URL}`);
+
     ({ store, engine, worker, tmpDir, treePath } = createTestEnv());
     worker.start();
   });
   after(() => {
-    worker.stop();
-    store.close();
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    if (worker) worker.stop();
+    if (store) store.close();
+    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   // ==========================================
@@ -238,10 +274,21 @@ describe('In-Vitro — Autonomous AIDA Simulation', () => {
     }
 
     const allDone = await waitForJobs(store);
-    assert.ok(allDone, 'All render jobs should complete');
+    assert.ok(allDone, 'All render jobs should complete (timeout 120s)');
 
     const completed = store.getJobs('completed');
-    assert.ok(completed.length >= 3);
+    assert.ok(completed.length >= 3, `Expected >=3 completed, got ${completed.length}`);
+
+    // Verify actual image files were created
+    for (const job of completed) {
+      if (job.result?.image_path) {
+        assert.ok(fs.existsSync(job.result.image_path),
+          `Generated image should exist: ${job.result.image_path}`);
+        const stat = fs.statSync(job.result.image_path);
+        assert.ok(stat.size > 100, `Image file should have content (${stat.size} bytes)`);
+        console.error(`    ✓ Generated: ${path.basename(job.result.image_path)} (${Math.round(stat.size/1024)}KB)`);
+      }
+    }
   });
 
   it('Phase 2.4 — Simulated human rates variations', () => {
