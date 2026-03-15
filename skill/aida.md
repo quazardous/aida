@@ -112,8 +112,8 @@ User: "the underground city should feel like Moria but alive"
 → WebSearch("dwarven forge aesthetic games")
 → Extract insights: massive scale, carved stone, warm light from forges,
   functional architecture, layered vertical space
-→ ref_store_research(node_id, query, findings, axes: [échelle, vécu, température])
-→ genome_bulk_update: échelle→0.9, vécu→0.8, température→0.7
+→ ref_store_research(node_id, query, findings, axes: [scale, lived_in, temperature])
+→ genome_bulk_update: scale→0.9, lived_in→0.8, temperature→0.7
 ```
 
 **What to research:**
@@ -136,9 +136,9 @@ Use the resolved genome + prompt_map from axes to build generation prompts.
 
 ### 4. Collect Ratings
 Present variations to user. Accept ratings in any form:
-- Short: "4 keep" / "1 veto trop propre"
-- With tweaks: "3 keep +vécu -balance"
-- Free text: "j'aime le grain mais c'est trop symétrique"
+- Short: "4 keep" / "1 veto too clean"
+- With tweaks: "3 keep +texture -balance"
+- Free text: "I like the grain but it's too symmetrical"
 
 Process via `variation_rate`. Watch for `next_actions` in responses.
 
@@ -163,30 +163,30 @@ Periodically check `comment_pending`. When found:
 4. **Propose, don't impose** — suggest next steps via next_actions
 5. **Handle dirty carefully** — warn before actions that will dirty a subtree
 6. **Custom axes** — if user mentions a concept not covered by universal axes, propose creating a custom axis
-7. **Speak the user's language** — translate technical axes into visual language ("plus chaud" not "température +0.2")
+7. **Speak the user's language** — translate technical axes into visual language ("warmer" not "temperature +0.2")
 
 ## .comment File Format
 
 Users can drop `.comment` files anywhere in the tree:
 ```
 # In a variation directory:
-4 keep "super grain" +vécu -balance
+4 keep "great grain" +texture -balance
 
 # In a node directory:
-set température 0.2
-veto surfaces lisses
-promote vécu 0.8 "tout doit être patiné"
+set temperature 0.2
+veto smooth surfaces
+promote texture 0.8 "everything should look weathered"
 
 # URLs — stored as references, agent fetches and extracts insights:
 https://www.artstation.com/artwork/xyz this forge aesthetic
 ref: https://en.wikipedia.org/wiki/Derinkuyu_underground_city
-voir: https://example.com/dark-fantasy-palette
+see: https://example.com/dark-fantasy-palette
 
 # Search directives — agent runs WebSearch and stores findings:
 search: brutalist architecture underground spaces
-cherche: palette couleur Hayao Miyazaki forge
-recherche: dwarven city concept art game design
+search: Hayao Miyazaki forge color palette
+search: dwarven city concept art game design
 
 # Free text is always accepted:
-je veux que ça sente la suie et le métal chaud
+I want it to feel like soot and hot metal
 ```

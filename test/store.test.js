@@ -41,11 +41,11 @@ describe('Store - Init', () => {
     const axes = store.getAllAxes();
     assert.ok(axes.length >= 20, `Expected >=20 axes, got ${axes.length}`);
 
-    const forme = store.getAxis('forme');
-    assert.ok(forme);
-    assert.deepEqual(forme.poles, ['géométrique', 'organique']);
-    assert.equal(forme.family, 'structure');
-    assert.equal(forme.layer, 'universal');
+    const shape = store.getAxis('shape');
+    assert.ok(shape);
+    assert.deepEqual(shape.poles, ['geometric', 'organic']);
+    assert.equal(shape.family, 'structure');
+    assert.equal(shape.layer, 'universal');
   });
 
   it('should group axes by family', () => {
@@ -84,7 +84,7 @@ describe('Store - Universe Root', () => {
     assert.ok(genome.length >= 20);
 
     for (const gene of genome) {
-      if (gene.axis === 'dominante') continue; // hue_angle, different default
+      if (gene.axis === 'dominant_hue') continue; // hue_angle, different default
       assert.equal(gene.value, 0.5, `${gene.axis} should be 0.5`);
       assert.equal(gene.confidence, 0, `${gene.axis} confidence should be 0`);
     }
@@ -115,31 +115,31 @@ describe('Store - Genome Operations', () => {
   });
 
   it('should update a gene value', () => {
-    store.updateGene('universe_root', 'température', 0.8);
+    store.updateGene('universe_root', 'temperature', 0.8);
 
     const genome = store.getGenome('universe_root');
-    const temp = genome.find(g => g.axis === 'température');
+    const temp = genome.find(g => g.axis === 'temperature');
     assert.ok(temp);
     assert.equal(temp.value, 0.8);
   });
 
   it('should update gene confidence', () => {
-    store.updateGene('universe_root', 'température', 0.8, 0.7);
+    store.updateGene('universe_root', 'temperature', 0.8, 0.7);
 
     const genome = store.getGenome('universe_root');
-    const temp = genome.find(g => g.axis === 'température');
+    const temp = genome.find(g => g.axis === 'temperature');
     assert.equal(temp.confidence, 0.7);
   });
 
   it('should clamp values to [0, 1]', () => {
-    store.updateGene('universe_root', 'contraste', 1.5);
+    store.updateGene('universe_root', 'contrast', 1.5);
     const genome = store.getGenome('universe_root');
-    const c = genome.find(g => g.axis === 'contraste');
+    const c = genome.find(g => g.axis === 'contrast');
     assert.equal(c.value, 1);
 
-    store.updateGene('universe_root', 'contraste', -0.5);
+    store.updateGene('universe_root', 'contrast', -0.5);
     const genome2 = store.getGenome('universe_root');
-    const c2 = genome2.find(g => g.axis === 'contraste');
+    const c2 = genome2.find(g => g.axis === 'contrast');
     assert.equal(c2.value, 0);
   });
 
@@ -154,13 +154,13 @@ describe('Store - Genome Operations', () => {
 
   it('should find uncertain axes', () => {
     // Set some confidences
-    store.updateGene('universe_root', 'forme', 0.3, 0.9);
-    store.updateGene('universe_root', 'complexité', 0.5, 0.1);
+    store.updateGene('universe_root', 'shape', 0.3, 0.9);
+    store.updateGene('universe_root', 'complexity', 0.5, 0.1);
 
     const uncertain = store.getUncertainAxes('universe_root', 0.5);
     const uncertainIds = uncertain.map(u => u.axis);
-    assert.ok(uncertainIds.includes('complexité'));
-    assert.ok(!uncertainIds.includes('forme'));
+    assert.ok(uncertainIds.includes('complexity'));
+    assert.ok(!uncertainIds.includes('shape'));
   });
 });
 
@@ -177,12 +177,12 @@ describe('Store - Walls', () => {
   });
 
   it('should add a wall', () => {
-    const wallId = store.addWall('universe_root', 'réalisme', '> 0.7', 'pas de photoréalisme', true);
+    const wallId = store.addWall('universe_root', 'realism', '> 0.7', 'no photorealism', true);
     assert.ok(wallId > 0);
 
     const walls = store.getWalls('universe_root');
     assert.equal(walls.length, 1);
-    assert.equal(walls[0].axis, 'réalisme');
+    assert.equal(walls[0].axis, 'realism');
     assert.equal(walls[0].condition, '> 0.7');
   });
 
@@ -190,7 +190,7 @@ describe('Store - Walls', () => {
     const nodeFile = store.loadNodeFile('universe_root');
     assert.ok(nodeFile.node.walls);
     assert.equal(nodeFile.node.walls.length, 1);
-    assert.equal(nodeFile.node.walls[0].axis, 'réalisme');
+    assert.equal(nodeFile.node.walls[0].axis, 'realism');
   });
 });
 
@@ -208,7 +208,7 @@ describe('Store - Variations', () => {
 
   it('should create a variation with genome snapshot', () => {
     // Set some genome values first
-    store.updateGene('universe_root', 'température', 0.7);
+    store.updateGene('universe_root', 'temperature', 0.7);
     store.updateGene('universe_root', 'tension', 0.8);
 
     const variation = store.createVariation('universe_root', 1, 'test prompt');
@@ -217,7 +217,7 @@ describe('Store - Variations', () => {
     assert.equal(variation.node_id, 'universe_root');
     assert.equal(variation.pass, 1);
     assert.equal(variation.verdict, 'pending');
-    assert.equal(variation.genome_snapshot.température, 0.7);
+    assert.equal(variation.genome_snapshot.temperature, 0.7);
     assert.equal(variation.genome_snapshot.tension, 0.8);
   });
 
@@ -347,11 +347,11 @@ describe('Store - Tree Status', () => {
   });
 
   it('should search by axis value', () => {
-    store.updateGene('universe_root', 'température', 0.9);
-    const results = store.searchByAxis('température', 0.8, 1.0);
+    store.updateGene('universe_root', 'temperature', 0.9);
+    const results = store.searchByAxis('temperature', 0.8, 1.0);
     assert.equal(results.length, 1);
 
-    const noResults = store.searchByAxis('température', 0.0, 0.3);
+    const noResults = store.searchByAxis('temperature', 0.0, 0.3);
     assert.equal(noResults.length, 0);
   });
 });

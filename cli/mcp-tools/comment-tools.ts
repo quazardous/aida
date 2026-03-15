@@ -197,7 +197,7 @@ function parseComment(content: string, location: CommentLocation): CommentAction
 }
 
 function parseLine(line: string, location: CommentLocation): CommentAction | null {
-  // --- Rating shorthand: "4 keep super grain +vécu -balance" ---
+  // --- Rating shorthand: "4 keep great grain +texture -balance" ---
   const ratingMatch = /^([1-5])\s+(keep|remove|veto|rework|expand|spawn)\s*(.*)$/.exec(line);
   if (ratingMatch && location.variation_id) {
     const [, rating, verdict, rest] = ratingMatch;
@@ -218,7 +218,7 @@ function parseLine(line: string, location: CommentLocation): CommentAction | nul
   }
 
   // --- Veto shorthand: "veto ..." ---
-  const vetoMatch = /^(veto|jamais|pas de)\s+(.+)$/i.exec(line);
+  const vetoMatch = /^(veto|never|no)\s+(.+)$/i.exec(line);
   if (vetoMatch && location.node_id) {
     return {
       tool: 'wall_add',
@@ -233,7 +233,7 @@ function parseLine(line: string, location: CommentLocation): CommentAction | nul
     };
   }
 
-  // --- Set axis: "set température 0.2" ---
+  // --- Set axis: "set temperature 0.2" ---
   const setMatch = /^set\s+(\w+)\s+([0-9.]+)$/i.exec(line);
   if (setMatch && location.node_id) {
     return {
@@ -261,7 +261,7 @@ function parseLine(line: string, location: CommentLocation): CommentAction | nul
     };
   }
 
-  // --- Promote: "promote vécu 0.8 reason" ---
+  // --- Promote: "promote texture 0.8 reason" ---
   const promoteMatch = /^promote\s+(\w+)\s+([0-9.]+)\s*(.*)$/i.exec(line);
   if (promoteMatch && location.node_id) {
     return {
@@ -290,7 +290,7 @@ function parseLine(line: string, location: CommentLocation): CommentAction | nul
   }
 
   // --- URL reference: "url: https://..." or "ref: https://..." with optional note ---
-  const urlMatch = /^(?:url|ref|voir|see):\s*(https?:\/\/\S+)\s*(.*)$/i.exec(line);
+  const urlMatch = /^(?:url|ref|see):\s*(https?:\/\/\S+)\s*(.*)$/i.exec(line);
   if (urlMatch && location.node_id) {
     const url = urlMatch[1];
     const note = urlMatch[2].trim() || undefined;
@@ -326,7 +326,7 @@ function parseLine(line: string, location: CommentLocation): CommentAction | nul
   }
 
   // --- Search directive: "search: dark fantasy architecture" ---
-  const searchMatch = /^(?:search|cherche|recherche|look for|find):\s*(.+)$/i.exec(line);
+  const searchMatch = /^(?:search|look for|find):\s*(.+)$/i.exec(line);
   if (searchMatch && location.node_id) {
     return {
       tool: '_research',

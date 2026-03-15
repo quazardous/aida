@@ -36,7 +36,7 @@ export function createReferenceTools(store: Store): ToolDefinition[] {
             axes_hint: {
               type: 'array',
               items: { type: 'string' },
-              description: 'Which axes this reference informs (e.g. ["température", "vécu"])'
+              description: 'Which axes this reference informs (e.g. ["temperature", "texture"])'
             },
             insights: {
               type: 'array',

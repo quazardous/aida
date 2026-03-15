@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "aida-tree": {
+      "command": "node",
+      "args": ["AIDA_SERVER_PATH"],
+      "env": {}
+    }
+  }
+}

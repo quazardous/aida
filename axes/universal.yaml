@@ -13,24 +13,24 @@ families:
   structure:
     description: "Formal spatial and geometric properties"
     axes:
-      - id: forme
-        poles: [géométrique, organique]
+      - id: shape
+        poles: [geometric, organic]
         description: "Shape language: angular/constructed vs curved/natural"
         prompt_map:
           0.0: "geometric, angular, sharp edges, constructed, polygonal"
           0.5: "mixed shapes, semi-organic"
           1.0: "organic, curved, flowing, natural forms, biomorphic"
 
-      - id: complexité
-        poles: [minimal, élaboré]
+      - id: complexity
+        poles: [minimal, elaborate]
         description: "Level of detail and ornamentation"
         prompt_map:
           0.0: "minimal, simple, clean, uncluttered, bare"
           0.5: "moderate detail, some ornamentation"
           1.0: "elaborate, intricate, ornate, highly detailed, complex"
 
-      - id: espace
-        poles: [ouvert, fermé]
+      - id: space
+        poles: [open, enclosed]
         description: "Spatial feel: airy/expansive vs enclosed/tight"
         prompt_map:
           0.0: "open space, vast, expansive, airy, wide"
@@ -38,23 +38,23 @@ families:
           1.0: "enclosed, tight, claustrophobic, confined, dense"
 
       - id: balance
-        poles: [symétrique, asymétrique]
+        poles: [symmetric, asymmetric]
         description: "Compositional balance"
         prompt_map:
           0.0: "symmetrical, centered, balanced, ordered"
           0.5: "mostly balanced, slight asymmetry"
           1.0: "asymmetrical, off-center, dynamic composition, unbalanced"
 
-      - id: échelle
-        poles: [intime, monumental]
+      - id: scale
+        poles: [intimate, monumental]
         description: "Perceived scale and grandeur"
         prompt_map:
           0.0: "intimate, small-scale, personal, cozy"
           0.5: "human scale"
           1.0: "monumental, grand, imposing, massive, epic scale"
 
-      - id: densité
-        poles: [épuré, dense]
+      - id: density
+        poles: [sparse, dense]
         description: "Visual density and information load"
         prompt_map:
           0.0: "sparse, clean, minimal elements, breathing room"
@@ -67,8 +67,8 @@ families:
   color:
     description: "Chromatic properties based on Itten's color theory"
     axes:
-      - id: valeur
-        poles: [clair, sombre]
+      - id: value
+        poles: [light, dark]
         description: "Overall lightness/darkness"
         prompt_map:
           0.0: "bright, light, high-key, luminous, white"
@@ -76,23 +76,23 @@ families:
           1.0: "dark, shadowy, low-key, murky, black"
 
       - id: saturation
-        poles: [désaturé, saturé]
+        poles: [desaturated, saturated]
         description: "Color intensity/purity"
         prompt_map:
           0.0: "desaturated, muted, greyscale, washed out, monochrome"
           0.5: "moderate saturation"
           1.0: "saturated, vibrant, vivid, bold colors, intense"
 
-      - id: température
-        poles: [froid, chaud]
+      - id: temperature
+        poles: [cool, warm]
         description: "Color temperature"
         prompt_map:
           0.0: "cool colors, blue, teal, icy, cold"
           0.5: "neutral temperature"
           1.0: "warm colors, orange, amber, golden, hot"
 
-      - id: contraste
-        poles: [faible, fort]
+      - id: contrast
+        poles: [low, high]
         description: "Contrast between light and dark areas"
         prompt_map:
           0.0: "low contrast, flat, even lighting, soft"
@@ -107,7 +107,7 @@ families:
           0.5: "limited palette, analogous colors"
           1.0: "polychromatic, many colors, rainbow, diverse palette"
 
-      - id: dominante
+      - id: dominant_hue
         type: hue_angle
         range: [0, 360]
         description: "Dominant hue angle (0=red, 60=yellow, 120=green, 180=cyan, 240=blue, 300=magenta)"
@@ -125,8 +125,8 @@ families:
   perception:
     description: "How the image is perceived and experienced"
     axes:
-      - id: familiarité
-        poles: [familier, étrange]
+      - id: familiarity
+        poles: [familiar, strange]
         description: "Novelty/familiarity — Berlyne's collative variable"
         prompt_map:
           0.0: "familiar, conventional, recognizable, normal"
@@ -134,23 +134,23 @@ families:
           1.0: "strange, surreal, uncanny, alien, bizarre, otherworldly"
 
       - id: tension
-        poles: [calme, tendu]
+        poles: [calm, tense]
         description: "Visual tension and energy"
         prompt_map:
           0.0: "calm, serene, peaceful, relaxed, tranquil"
           0.5: "moderate energy"
           1.0: "tense, aggressive, chaotic, intense, dramatic"
 
-      - id: mouvement
-        poles: [statique, dynamique]
+      - id: movement
+        poles: [static, dynamic]
         description: "Implied motion and dynamism"
         prompt_map:
           0.0: "static, still, frozen, posed, stable"
           0.5: "slight movement"
           1.0: "dynamic, motion, action, kinetic, flowing"
 
-      - id: lisibilité
-        poles: [ambigu, lisible]
+      - id: readability
+        poles: [ambiguous, readable]
         description: "Clarity of visual communication"
         prompt_map:
           0.0: "ambiguous, abstract, unclear, layered meaning"
@@ -163,24 +163,24 @@ families:
   semantic:
     description: "Subjective meaning — Osgood's Evaluation/Potency/Activity"
     axes:
-      - id: évaluation
-        poles: [repoussant, attirant]
+      - id: evaluation
+        poles: [repulsive, attractive]
         description: "Osgood E: good-bad, attractive-repulsive"
         prompt_map:
           0.0: "ugly, repulsive, disturbing, grotesque"
           0.5: "neutral"
           1.0: "beautiful, attractive, appealing, elegant"
 
-      - id: puissance
-        poles: [fragile, puissant]
+      - id: potency
+        poles: [fragile, powerful]
         description: "Osgood P: strong-weak"
         prompt_map:
           0.0: "fragile, delicate, light, ethereal, weak"
           0.5: "moderate"
           1.0: "powerful, strong, heavy, solid, imposing"
 
-      - id: activité
-        poles: [passif, actif]
+      - id: activity
+        poles: [passive, active]
         description: "Osgood A: active-passive"
         prompt_map:
           0.0: "passive, still, dormant, inert"
@@ -193,16 +193,16 @@ families:
   rendering:
     description: "Technical rendering properties for image generation"
     axes:
-      - id: réalisme
-        poles: [abstrait, photoréaliste]
+      - id: realism
+        poles: [abstract, photorealistic]
         description: "Level of representational fidelity"
         prompt_map:
           0.0: "abstract, non-representational, conceptual"
           0.5: "stylized, semi-realistic, illustrated"
           1.0: "photorealistic, hyperrealistic, photograph"
 
-      - id: trait
-        poles: [fin, épais]
+      - id: stroke
+        poles: [thin, thick]
         description: "Line weight and stroke quality"
         prompt_map:
           0.0: "thin lines, fine detail, delicate strokes, hairline"
@@ -210,23 +210,23 @@ families:
           1.0: "thick lines, bold strokes, chunky, heavy outlines"
 
       - id: texture
-        poles: [lisse, texturé]
+        poles: [smooth, textured]
         description: "Surface texture quality"
         prompt_map:
           0.0: "smooth, clean, polished, glossy"
           0.5: "some texture"
           1.0: "textured, rough, gritty, grainy, tactile"
 
-      - id: matérialité
-        poles: [plat, volumétrique]
+      - id: materiality
+        poles: [flat, volumetric]
         description: "Sense of 3D volume and material presence"
         prompt_map:
           0.0: "flat, 2D, graphic, paper-like"
           0.5: "slight depth"
           1.0: "volumetric, 3D, sculptural, tangible, material"
 
-      - id: finition
-        poles: [brut, poli]
+      - id: finish
+        poles: [raw, polished]
         description: "Level of finish and polish"
         prompt_map:
           0.0: "raw, rough, unfinished, sketch-like, crude"

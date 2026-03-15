@@ -11,7 +11,7 @@ When starting a pass:
 1. Call `pass_start`
 2. Identify uncertain axes via `node_get` (low confidence)
 3. Generate 3 variations that explore the uncertain axes
-4. Present the planche to the user
+4. Present the board to the user
 
 When closing a pass:
 1. Verify all variations are rated

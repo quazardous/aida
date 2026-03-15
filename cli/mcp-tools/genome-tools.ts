@@ -70,13 +70,26 @@ export function createGenomeTools(store: Store): ToolDefinition[] {
             }
           }
 
+          // Auto-propagate dirty to children if value changed
+          let dirtyReport: any[] = [];
+          if (value !== undefined) {
+            const children = store.getChildren(args.node_id);
+            if (children.length > 0) {
+              for (const child of children) {
+                const reports = store.dirtySubtree(child.id, 'minor', `Parent axis ${args.axis} changed`, [args.axis]);
+                dirtyReport.push(...reports);
+              }
+            }
+          }
+
           return ok({
             success: true,
             data: {
               node_id: args.node_id,
               axis: args.axis,
               value,
-              confidence
+              confidence,
+              dirty_propagated: dirtyReport.length > 0 ? dirtyReport : undefined
             }
           });
         } catch (e: any) {
@@ -282,28 +295,41 @@ export function createGenomeTools(store: Store): ToolDefinition[] {
         }
       },
       handler: (args) => {
-        // Check collision with existing
         const existing = store.getAxis(args.id);
         if (existing) return err(`Axis "${args.id}" already exists (${existing.layer})`);
 
-        // TODO: persist to custom.yaml and reload
-        return ok({
-          success: true,
-          data: {
+        try {
+          store.createCustomAxis({
             id: args.id,
-            poles: args.poles,
+            poles: args.poles as [string, string],
             family: args.family || 'custom',
-            layer: 'custom',
             description: args.description,
-            message: 'Custom axis registered. Will be available after next reload.'
-          },
-          next_actions: [{
-            tool: 'genome_update',
-            args: { node_id: 'universe_root', axis: args.id, value: 0.5, confidence: 0 },
+            layer: 'custom',
+            distinct_from: args.distinct_from,
+            scope: args.scope || '*',
+            prompt_map: args.prompt_map
+          });
+
+          return ok({
+            success: true,
+            data: {
+              id: args.id,
+              poles: args.poles,
+              family: args.family || 'custom',
+              layer: 'custom',
+              description: args.description,
+              message: 'Custom axis created and added to all existing nodes at 0.5/confidence 0.'
+            },
+            next_actions: [{
+              tool: 'genome_update',
+              args: { node_id: 'universe_root', axis: args.id, value: 0.5, confidence: 0 },
             reason: 'Initialize this axis on universe_root',
             priority: 'normal'
           }]
-        });
+          });
+        } catch (e: any) {
+          return err(e.message);
+        }
       }
     }
   ];

@@ -8,6 +8,8 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { DbManager } from './db-manager.js';
+import { resolveGenome, buildPromptFromGenome } from '../lib/genome-resolver.js';
+import type { NodeGenomeData, ResolvedGenome } from '../lib/genome-resolver.js';
 import type {
   AidaNode, Gene, Genome, Wall, Attractor, Variation, Pass, Reference,
   NodeStatus, Verdict, Transform, AxisDef, Tweak, DirtyReport
@@ -101,6 +103,51 @@ export class Store {
     return this.getAllAxes().filter(a => a.family === family);
   }
 
+  /**
+   * Create a custom axis, persist to custom.yaml, and add to all existing nodes.
+   */
+  createCustomAxis(axisDef: AxisDef): void {
+    if (this.axes.has(axisDef.id)) {
+      throw new Error(`Axis "${axisDef.id}" already exists`);
+    }
+
+    // Register in memory
+    this.axes.set(axisDef.id, axisDef);
+
+    // Persist to custom.yaml
+    const customPath = path.join(this.axesPath, 'custom.yaml');
+    let content: any = { axes: [] };
+    if (fs.existsSync(customPath)) {
+      content = yaml.load(fs.readFileSync(customPath, 'utf-8')) as any || { axes: [] };
+      if (!content.axes) content.axes = [];
+    }
+
+    content.axes.push({
+      id: axisDef.id,
+      poles: axisDef.poles,
+      family: axisDef.family,
+      description: axisDef.description,
+      distinct_from: axisDef.distinct_from,
+      scope: axisDef.scope,
+      prompt_map: axisDef.prompt_map
+    });
+
+    fs.writeFileSync(customPath, yaml.dump(content, { lineWidth: 120, noRefs: true }));
+
+    // Add to all existing nodes at default value 0.5, confidence 0
+    const allNodes = this.db.getAllNodes();
+    for (const node of allNodes) {
+      this.db.setGene(node.id, {
+        axis: axisDef.id,
+        value: 0.5,
+        confidence: 0,
+        mode: 'inherit',
+        family: axisDef.family,
+        layer: 'custom'
+      });
+    }
+  }
+
   // === NODE OPERATIONS ===
 
   /**
@@ -173,8 +220,162 @@ export class Store {
     return node;
   }
 
+  /**
+   * Create a child node under a parent. Inherits parent genome as starting point.
+   */
+  createChildNode(
+    parentId: string,
+    id: string,
+    name: string,
+    type: string,
+    transforms?: Transform[]
+  ): AidaNode {
+    const parent = this.db.getNode(parentId);
+    if (!parent) throw new Error(`Parent not found: ${parentId}`);
+
+    const now = new Date().toISOString();
+    const nodePath = path.join(parent.path, id);
+    const depth = parent.depth + 1;
+
+    // Create directory
+    const dirPath = path.join(this.treePath, nodePath);
+    fs.mkdirSync(dirPath, { recursive: true });
+    fs.mkdirSync(path.join(dirPath, 'variations'), { recursive: true });
+    fs.mkdirSync(path.join(dirPath, 'references'), { recursive: true });
+
+    // Inherit parent genome as starting point
+    const parentGenome = this.db.getGenome(parentId);
+    const genome: Record<string, { value: number; confidence: number; mode: string }> = {};
+    for (const g of parentGenome) {
+      genome[g.axis] = { value: g.value, confidence: 0, mode: 'inherit' };
+    }
+
+    // Write _node.yaml
+    const nodeFile: NodeFile = {
+      node: {
+        id,
+        name,
+        type,
+        parent: parentId,
+        status: 'draft',
+        genome: { universal: genome },
+        transforms: transforms || []
+      }
+    };
+
+    fs.writeFileSync(
+      path.join(dirPath, '_node.yaml'),
+      yaml.dump(nodeFile, { lineWidth: 120, noRefs: true })
+    );
+
+    // Index in DB
+    const node: AidaNode = {
+      id,
+      name,
+      type,
+      parent_id: parentId,
+      status: 'draft',
+      path: nodePath,
+      depth,
+      created_at: now,
+      updated_at: now
+    };
+
+    this.db.transaction(() => {
+      this.db.createNode(node);
+      for (const [axisId, gene] of Object.entries(genome)) {
+        const axisDef = this.axes.get(axisId);
+        this.db.setGene(id, {
+          axis: axisId,
+          value: gene.value,
+          confidence: gene.confidence,
+          mode: gene.mode as any,
+          family: axisDef?.family || 'unknown',
+          layer: axisDef?.layer || 'universal'
+        });
+      }
+    });
+
+    return node;
+  }
+
+  getChildren(parentId: string): AidaNode[] {
+    return this.db.getChildren(parentId);
+  }
+
   getNode(id: string): AidaNode | null {
     return this.db.getNode(id);
+  }
+
+  /**
+   * Build ancestor chain from root to target node (inclusive).
+   * Returns array of NodeGenomeData ready for the resolver.
+   */
+  getAncestorChain(nodeId: string): NodeGenomeData[] {
+    const chain: NodeGenomeData[] = [];
+    let currentId: string | null = nodeId;
+
+    // Walk up to root
+    const nodeIds: string[] = [];
+    while (currentId) {
+      nodeIds.unshift(currentId);
+      const node = this.db.getNode(currentId);
+      if (!node) break;
+      currentId = node.parent_id;
+    }
+
+    // Build NodeGenomeData for each
+    for (const nid of nodeIds) {
+      const genome = this.db.getGenome(nid);
+      const genesMap: Record<string, any> = {};
+      for (const g of genome) {
+        genesMap[g.axis] = g;
+      }
+
+      const nodeFile = this.loadNodeFile(nid);
+      const transforms: Transform[] = nodeFile?.node?.transforms || [];
+      const walls = this.db.getWalls(nid);
+
+      chain.push({
+        node_id: nid,
+        genes: genesMap,
+        transforms,
+        walls
+      });
+    }
+
+    return chain;
+  }
+
+  /**
+   * Resolve the effective genome for a node (full inheritance chain + transforms).
+   */
+  resolveNodeGenome(nodeId: string): ResolvedGenome {
+    const chain = this.getAncestorChain(nodeId);
+
+    // Build sibling genomes for mirror transforms
+    const node = this.db.getNode(nodeId);
+    const siblings = new Map<string, Record<string, number>>();
+    if (node?.contrast_with) {
+      const siblingGenome = this.db.getGenome(node.contrast_with);
+      const siblingMap: Record<string, number> = {};
+      for (const g of siblingGenome) siblingMap[g.axis] = g.value;
+      siblings.set(node.contrast_with, siblingMap);
+    }
+
+    return resolveGenome(chain, siblings);
+  }
+
+  /**
+   * Build a generation prompt from a node's resolved genome.
+   */
+  buildNodePrompt(nodeId: string, threshold: number = 0.2): string {
+    const resolved = this.resolveNodeGenome(nodeId);
+    const promptMaps = new Map<string, Record<string, string>>();
+    for (const axis of this.axes.values()) {
+      if (axis.prompt_map) promptMaps.set(axis.id, axis.prompt_map);
+    }
+    return buildPromptFromGenome(resolved, promptMaps, threshold);
   }
 
   /**
@@ -398,37 +599,106 @@ export class Store {
   // === DIRTY OPERATIONS ===
 
   /**
-   * Mark a node and its descendants as dirty
+   * Mark a node and its descendants as dirty.
+   * Axis-aware: computes severity per child based on their transforms.
+   *
+   * @param changedAxes If provided, only these axes changed — allows
+   *   computing per-child severity based on how each child uses those axes.
    */
-  dirtySubtree(nodeId: string, severity: 'minor' | 'major' | 'broken', reason: string): DirtyReport[] {
+  dirtySubtree(
+    nodeId: string,
+    severity: 'minor' | 'major' | 'broken',
+    reason: string,
+    changedAxes?: string[]
+  ): DirtyReport[] {
     const reports: DirtyReport[] = [];
 
-    const markDirty = (nid: string, sev: 'minor' | 'major' | 'broken') => {
+    const markDirty = (nid: string, sev: 'minor' | 'major' | 'broken', parentChangedAxes?: string[]) => {
       const node = this.db.getNode(nid);
       if (!node) return;
 
       // Don't dirty locked nodes — they need explicit unlock
       if (node.status === 'locked') return;
 
-      const status: NodeStatus = `dirty:${sev}`;
+      // If we know which axes changed, compute severity per child
+      let childSev = sev;
+      const affectedAxes: string[] = [];
+
+      if (parentChangedAxes && parentChangedAxes.length > 0) {
+        const nodeFile = this.loadNodeFile(nid);
+        const transforms: Transform[] = nodeFile?.node?.transforms || [];
+
+        // Check how this child uses each changed axis
+        let hasInvertOrMirror = false;
+        let hasSetOrClamp = false;
+        let hasInherit = false;
+
+        for (const axis of parentChangedAxes) {
+          // Find which transform applies to this axis
+          let axisTransform: string = 'inherit'; // default
+
+          for (const t of transforms) {
+            const matchesAxis = t.axes.some(pattern => {
+              if (pattern === '*') return !(t.except?.includes(axis));
+              if (pattern.endsWith('*')) return axis.startsWith(pattern.slice(0, -1));
+              return pattern === axis;
+            });
+            if (matchesAxis) {
+              axisTransform = t.fn;
+              break;
+            }
+          }
+
+          switch (axisTransform) {
+            case 'set':
+            case 'clamp':
+              // Protected — parent change doesn't affect this child on this axis
+              hasSetOrClamp = true;
+              break;
+            case 'invert':
+            case 'mirror':
+              // Major impact — the result flips
+              hasInvertOrMirror = true;
+              affectedAxes.push(axis);
+              break;
+            default:
+              // inherit, shift, scale, noise, map — value changes proportionally
+              hasInherit = true;
+              affectedAxes.push(axis);
+              break;
+          }
+        }
+
+        // Determine severity
+        if (affectedAxes.length === 0) {
+          // All changed axes are protected by set/clamp — not dirty
+          return;
+        } else if (hasInvertOrMirror) {
+          childSev = 'major';
+        } else if (hasInherit) {
+          childSev = 'minor';
+        }
+      }
+
+      const status: NodeStatus = `dirty:${childSev}`;
       this.db.updateNodeStatus(nid, status);
 
       reports.push({
         node_id: nid,
-        severity: sev,
+        severity: childSev,
         reason,
-        affected_axes: [],
-        auto_cleanable: sev === 'minor'
+        affected_axes: affectedAxes,
+        auto_cleanable: childSev === 'minor'
       });
 
-      // Recurse to children (severity can attenuate)
+      // Recurse to children
       const children = this.db.getChildren(nid);
       for (const child of children) {
-        markDirty(child.id, sev === 'broken' ? 'major' : sev);
+        markDirty(child.id, childSev === 'broken' ? 'major' : childSev, affectedAxes.length > 0 ? affectedAxes : parentChangedAxes);
       }
     };
 
-    markDirty(nodeId, severity);
+    markDirty(nodeId, severity, changedAxes);
     return reports;
   }
 
@@ -529,7 +799,18 @@ export class Store {
     // Walk tree recursively
     const walkTree = (dir: string, parentId: string | null, depth: number) => {
       const nodeYaml = path.join(dir, '_node.yaml');
-      if (!fs.existsSync(nodeYaml)) return;
+      if (!fs.existsSync(nodeYaml)) {
+        // No _node.yaml at this level — still recurse into subdirectories
+        // (handles the tree root directory which has no _node.yaml itself)
+        if (fs.existsSync(dir)) {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            if (!entry.isDirectory()) continue;
+            if (entry.name === 'variations' || entry.name.startsWith('.') || entry.name === 'references') continue;
+            walkTree(path.join(dir, entry.name), parentId, depth);
+          }
+        }
+        return;
+      }
 
       const content = yaml.load(fs.readFileSync(nodeYaml, 'utf-8')) as NodeFile;
       if (!content?.node) return;
