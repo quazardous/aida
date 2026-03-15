@@ -97,7 +97,10 @@ async function checkGpuAvailable() {
 }
 
 function createTestEnv() {
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aida-invitro-'));
+  const tmpDir = path.join(process.cwd(), 'var', 'in-vitro');
+  // Clean previous run
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+
   const treePath = path.join(tmpDir, 'tree');
   const dbPath = path.join(tmpDir, 'aida.db');
   const axesPath = path.join(tmpDir, 'axes');
@@ -167,7 +170,7 @@ describe('In-Vitro — Autonomous AIDA Simulation', () => {
   after(() => {
     if (worker) worker.stop();
     if (store) store.close();
-    if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
+    console.error(`\n  Output at: ${tmpDir}\n`);
   });
 
   // ==========================================
