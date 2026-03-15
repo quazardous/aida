@@ -5,7 +5,7 @@
  * The DB is a derived index that can be rebuilt from files.
  */
 import Database from 'better-sqlite3';
-import type { AidaNode, Gene, Wall, Attractor, Variation, Pass, NodeStatus, Verdict } from '../lib/types.js';
+import type { AidaNode, Gene, Wall, Attractor, Variation, Pass, Reference, NodeStatus, Verdict } from '../lib/types.js';
 
 const SCHEMA_SQL = `
 -- Nodes
@@ -95,11 +95,28 @@ CREATE TABLE IF NOT EXISTS comments (
     actions TEXT                  -- JSON array of parsed actions
 );
 
+-- References (web research, image refs, inspiration sources)
+CREATE TABLE IF NOT EXISTS refs (
+    id TEXT PRIMARY KEY,
+    node_id TEXT NOT NULL,
+    type TEXT NOT NULL,            -- url, image, search, note
+    source TEXT NOT NULL,          -- URL, file path, or search query
+    title TEXT NOT NULL,
+    description TEXT,
+    axes_hint TEXT,                -- JSON array of axis IDs
+    insights TEXT,                 -- JSON array of key takeaways
+    tags TEXT,                     -- JSON array
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (node_id) REFERENCES nodes(id)
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_genome_node ON genome(node_id);
 CREATE INDEX IF NOT EXISTS idx_genome_axis ON genome(axis);
 CREATE INDEX IF NOT EXISTS idx_variations_node ON variations(node_id);
 CREATE INDEX IF NOT EXISTS idx_variations_verdict ON variations(verdict);
+CREATE INDEX IF NOT EXISTS idx_refs_node ON refs(node_id);
+CREATE INDEX IF NOT EXISTS idx_refs_type ON refs(type);
 CREATE INDEX IF NOT EXISTS idx_walls_node ON walls(node_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_parent ON nodes(parent_id);
 CREATE INDEX IF NOT EXISTS idx_nodes_status ON nodes(status);
@@ -328,6 +345,56 @@ export class DbManager {
     this.db.prepare("UPDATE passes SET status = 'closed', closed_at = ? WHERE id = ?").run(now, id);
   }
 
+  // === REFERENCES ===
+
+  addRef(ref: Reference): void {
+    this.db.prepare(`
+      INSERT INTO refs (id, node_id, type, source, title, description, axes_hint, insights, tags, created_at)
+      VALUES (@id, @node_id, @type, @source, @title, @description, @axes_hint, @insights, @tags, @created_at)
+    `).run({
+      ...ref,
+      axes_hint: JSON.stringify(ref.axes_hint),
+      insights: JSON.stringify(ref.insights),
+      tags: JSON.stringify(ref.tags),
+      description: ref.description ?? null
+    });
+  }
+
+  getRefs(nodeId: string, type?: string): Reference[] {
+    let sql = 'SELECT * FROM refs WHERE node_id = ?';
+    const params: unknown[] = [nodeId];
+    if (type) {
+      sql += ' AND type = ?';
+      params.push(type);
+    }
+    sql += ' ORDER BY created_at DESC';
+    const rows = this.db.prepare(sql).all(...params) as any[];
+    return rows.map(r => ({
+      ...r,
+      axes_hint: JSON.parse(r.axes_hint || '[]'),
+      insights: JSON.parse(r.insights || '[]'),
+      tags: JSON.parse(r.tags || '[]')
+    }));
+  }
+
+  searchRefs(query: string): Reference[] {
+    const rows = this.db.prepare(`
+      SELECT * FROM refs
+      WHERE title LIKE ? OR description LIKE ? OR source LIKE ?
+      ORDER BY created_at DESC
+    `).all(`%${query}%`, `%${query}%`, `%${query}%`) as any[];
+    return rows.map(r => ({
+      ...r,
+      axes_hint: JSON.parse(r.axes_hint || '[]'),
+      insights: JSON.parse(r.insights || '[]'),
+      tags: JSON.parse(r.tags || '[]')
+    }));
+  }
+
+  deleteRef(id: string): void {
+    this.db.prepare('DELETE FROM refs WHERE id = ?').run(id);
+  }
+
   // === QUERIES ===
 
   /**
@@ -336,6 +403,7 @@ export class DbManager {
   clearAll(): void {
     this.db.exec('DELETE FROM comments');
     this.db.exec('DELETE FROM passes');
+    this.db.exec('DELETE FROM refs');
     this.db.exec('DELETE FROM variations');
     this.db.exec('DELETE FROM attractors');
     this.db.exec('DELETE FROM walls');

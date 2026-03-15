@@ -23,6 +23,7 @@ import { createDirtyTools } from '../cli/mcp-tools/dirty-tools.js';
 import { createTreeTools } from '../cli/mcp-tools/tree-tools.js';
 import { createCommentTools } from '../cli/mcp-tools/comment-tools.js';
 import { createGenerateTools } from '../cli/mcp-tools/generate-tools.js';
+import { createReferenceTools } from '../cli/mcp-tools/reference-tools.js';
 import { createEngine } from '../cli/engine/index.js';
 import type { EngineConfig } from '../cli/engine/index.js';
 import type { ToolDefinition } from '../cli/mcp-tools/types.js';
@@ -95,7 +96,8 @@ async function main() {
     ...createDirtyTools(store),
     ...createTreeTools(store),
     ...createCommentTools(store, treePath),
-    ...createGenerateTools(store, engine, treePath)
+    ...createGenerateTools(store, engine, treePath),
+    ...createReferenceTools(store)
   ];
 
   // Build handler map

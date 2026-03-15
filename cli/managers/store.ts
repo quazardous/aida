@@ -9,7 +9,7 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { DbManager } from './db-manager.js';
 import type {
-  AidaNode, Gene, Genome, Wall, Attractor, Variation, Pass,
+  AidaNode, Gene, Genome, Wall, Attractor, Variation, Pass, Reference,
   NodeStatus, Verdict, Transform, AxisDef, Tweak, DirtyReport
 } from '../lib/types.js';
 
@@ -444,6 +444,62 @@ export class Store {
 
   getUncertainAxes(nodeId: string, threshold?: number): (Gene & { family: string })[] {
     return this.db.getUncertainAxes(nodeId, threshold);
+  }
+
+  // === REFERENCES ===
+
+  addRef(
+    nodeId: string,
+    type: string,
+    source: string,
+    title: string,
+    description: string | null,
+    axesHint: string[],
+    insights: string[],
+    tags: string[]
+  ): Reference {
+    const now = new Date().toISOString();
+    const existing = this.db.getRefs(nodeId);
+    const refNum = (existing.length + 1).toString().padStart(3, '0');
+    const refId = `${nodeId}_ref_${refNum}`;
+
+    const ref: Reference = {
+      id: refId,
+      node_id: nodeId,
+      type: type as any,
+      source,
+      title,
+      description,
+      axes_hint: axesHint,
+      insights,
+      tags,
+      created_at: now
+    };
+
+    this.db.addRef(ref);
+
+    // Also write to refs.yaml in the node directory
+    const node = this.db.getNode(nodeId);
+    if (node) {
+      const refsDir = path.join(this.treePath, node.path, 'references');
+      fs.mkdirSync(refsDir, { recursive: true });
+      const refFile = path.join(refsDir, `${refId}.yaml`);
+      fs.writeFileSync(refFile, yaml.dump({ reference: ref }, { lineWidth: 120, noRefs: true }));
+    }
+
+    return ref;
+  }
+
+  getRefs(nodeId: string, type?: string): Reference[] {
+    return this.db.getRefs(nodeId, type);
+  }
+
+  searchRefs(query: string): Reference[] {
+    return this.db.searchRefs(query);
+  }
+
+  removeRef(refId: string): void {
+    this.db.deleteRef(refId);
   }
 
   // === TREE STATUS ===

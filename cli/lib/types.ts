@@ -160,6 +160,20 @@ export interface Pass {
   closed_at: string | null;
 }
 
+// --- Reference (web research, image ref, inspiration source) ---
+export interface Reference {
+  id: string;
+  node_id: string;
+  type: 'url' | 'image' | 'search' | 'note';
+  source: string;                // URL, file path, or search query
+  title: string;
+  description: string | null;    // what was extracted/learned
+  axes_hint: string[];           // which axes this reference informs
+  insights: string[];            // key takeaways extracted by agent
+  tags: string[];
+  created_at: string;
+}
+
 // --- Comment action (parsed from .comment file) ---
 export interface CommentAction {
   tool: string;

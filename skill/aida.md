@@ -55,6 +55,13 @@ You have access to the `aida-tree` MCP server with these tools:
 - `generate_render` — render variation images using configured engine (ComfyUI/Forge/mock)
 - `generate_prompt_preview` — preview prompt from current genome without generating
 
+### References & Research
+- `ref_add` — attach a reference (URL, image, search result, note) to a node
+- `ref_list` — list references for a node
+- `ref_search` — search across all references
+- `ref_remove` — remove a reference
+- `ref_store_research` — persist web research findings (call after WebSearch/WebFetch)
+
 ### Comments
 - `comment_pending` — list unprocessed .comment files
 - `comment_process` — parse a .comment into actions (without executing)
@@ -77,6 +84,47 @@ Ask the user structured questions to establish initial mood:
 - What it should NOT look like?
 
 Translate answers into initial genome adjustments via `genome_bulk_update`.
+
+### 2b. Research & References
+**The depth is in the details.** During exploration, actively research to enrich the artistic direction:
+
+**When the user suggests URLs or search directions:**
+1. Use `WebFetch` to read the URL content
+2. Extract visual/artistic insights
+3. Store findings via `ref_add` or `ref_store_research`
+4. Translate insights into genome adjustments
+
+**When the user mentions concepts you can research:**
+- Proactively suggest: "I could research [X] to find visual references — want me to?"
+- Use `WebSearch` for art history, architecture styles, cultural visual codes, etc.
+- Search for real-world references that ground the artistic direction
+
+**When a .comment contains `search:` or a URL:**
+- The comment parser detects `search: dark fantasy architecture` → triggers research
+- URLs (bare or with `ref:`) are stored as references
+- Use WebFetch on URLs to extract insights, then `ref_store_research`
+
+**Example research flow:**
+```
+User: "the underground city should feel like Moria but alive"
+→ WebSearch("Moria Lord of the Rings architecture visual style")
+→ WebSearch("underground cities real world Derinkuyu Cappadocia")
+→ WebSearch("dwarven forge aesthetic games")
+→ Extract insights: massive scale, carved stone, warm light from forges,
+  functional architecture, layered vertical space
+→ ref_store_research(node_id, query, findings, axes: [échelle, vécu, température])
+→ genome_bulk_update: échelle→0.9, vécu→0.8, température→0.7
+```
+
+**What to research:**
+- Art movements and styles (Art Nouveau, Brutalism, Ukiyo-e...)
+- Real-world architectural references
+- Color palettes from films, games, paintings
+- Cultural visual codes (Japanese, Gothic, Afrofuturist...)
+- Material and texture references
+- Historical costume/armor/weapon styles for character design
+
+Store everything via `ref_add` / `ref_store_research`. These references persist and inform future passes.
 
 ### 3. Generate Variations
 For each pass, generate 3 variations:
@@ -128,6 +176,16 @@ Users can drop `.comment` files anywhere in the tree:
 set température 0.2
 veto surfaces lisses
 promote vécu 0.8 "tout doit être patiné"
+
+# URLs — stored as references, agent fetches and extracts insights:
+https://www.artstation.com/artwork/xyz this forge aesthetic
+ref: https://en.wikipedia.org/wiki/Derinkuyu_underground_city
+voir: https://example.com/dark-fantasy-palette
+
+# Search directives — agent runs WebSearch and stores findings:
+search: brutalist architecture underground spaces
+cherche: palette couleur Hayao Miyazaki forge
+recherche: dwarven city concept art game design
 
 # Free text is always accepted:
 je veux que ça sente la suie et le métal chaud

@@ -289,6 +289,55 @@ function parseLine(line: string, location: CommentLocation): CommentAction | nul
     };
   }
 
+  // --- URL reference: "url: https://..." or "ref: https://..." with optional note ---
+  const urlMatch = /^(?:url|ref|voir|see):\s*(https?:\/\/\S+)\s*(.*)$/i.exec(line);
+  if (urlMatch && location.node_id) {
+    const url = urlMatch[1];
+    const note = urlMatch[2].trim() || undefined;
+    return {
+      tool: 'ref_add',
+      args: {
+        node_id: location.node_id,
+        type: 'url',
+        source: url,
+        title: note || url,
+        description: note
+      },
+      raw_line: line
+    };
+  }
+
+  // --- Bare URL on its own line ---
+  const bareUrlMatch = /^(https?:\/\/\S+)\s*(.*)$/.exec(line);
+  if (bareUrlMatch && location.node_id) {
+    const url = bareUrlMatch[1];
+    const note = bareUrlMatch[2].trim() || undefined;
+    return {
+      tool: 'ref_add',
+      args: {
+        node_id: location.node_id,
+        type: 'url',
+        source: url,
+        title: note || url,
+        description: note
+      },
+      raw_line: line
+    };
+  }
+
+  // --- Search directive: "search: dark fantasy architecture" ---
+  const searchMatch = /^(?:search|cherche|recherche|look for|find):\s*(.+)$/i.exec(line);
+  if (searchMatch && location.node_id) {
+    return {
+      tool: '_research',
+      args: {
+        node_id: location.node_id,
+        query: searchMatch[1].trim()
+      },
+      raw_line: line
+    };
+  }
+
   // --- Free text note (anything else) ---
   if (location.node_id) {
     return {
