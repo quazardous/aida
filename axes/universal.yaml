@@ -4,6 +4,9 @@
 #
 # Each axis is bipolar, normalized [0, 1].
 # pole_low = value 0.0, pole_high = value 1.0
+#
+# evocation: natural language describing the feeling at each pole (feeds Flux/human)
+# tokens: parametric keywords weighted by axis value (feeds prompt weighting)
 
 families:
 
@@ -16,50 +19,68 @@ families:
       - id: shape
         poles: [geometric, organic]
         description: "Shape language: angular/constructed vs curved/natural"
-        prompt_map:
-          0.0: "geometric, angular, sharp edges, constructed, polygonal"
-          0.5: "mixed shapes, semi-organic"
-          1.0: "organic, curved, flowing, natural forms, biomorphic"
+        evocation:
+          0.0: "Hard edges and precise angles, constructed forms built with ruler and compass, crystalline geometry"
+          0.5: "A conversation between structure and nature, edges softening into curves"
+          1.0: "Flowing organic forms that breathe and grow, shapes born from nature's patient hand"
+        tokens:
+          low: [geometric, angular, sharp, polygonal, faceted, crystalline, constructed]
+          high: [organic, curved, flowing, biomorphic, natural, sinuous, grown]
 
       - id: complexity
         poles: [minimal, elaborate]
         description: "Level of detail and ornamentation"
-        prompt_map:
-          0.0: "minimal, simple, clean, uncluttered, bare"
-          0.5: "moderate detail, some ornamentation"
-          1.0: "elaborate, intricate, ornate, highly detailed, complex"
+        evocation:
+          0.0: "The power of emptiness, stripped to its essence, every element earns its place"
+          0.5: "Enough detail to intrigue, enough restraint to breathe"
+          1.0: "Every surface tells a story, layers upon layers of intricate ornamentation, overwhelming richness"
+        tokens:
+          low: [minimal, simple, clean, sparse, bare, essential, austere]
+          high: [elaborate, intricate, ornate, detailed, complex, decorated, embellished]
 
       - id: space
         poles: [open, enclosed]
         description: "Spatial feel: airy/expansive vs enclosed/tight"
-        prompt_map:
-          0.0: "open space, vast, expansive, airy, wide"
-          0.5: "balanced space"
-          1.0: "enclosed, tight, claustrophobic, confined, dense"
+        evocation:
+          0.0: "Vast horizons stretching endlessly, the liberating vertigo of open space"
+          0.5: "A room with windows, contained yet connected to what lies beyond"
+          1.0: "Walls pressing close, the intimate weight of enclosure, air thick with presence"
+        tokens:
+          low: [open, vast, expansive, airy, wide, horizon, boundless]
+          high: [enclosed, tight, claustrophobic, confined, narrow, compressed, intimate]
 
       - id: balance
         poles: [symmetric, asymmetric]
         description: "Compositional balance"
-        prompt_map:
-          0.0: "symmetrical, centered, balanced, ordered"
-          0.5: "mostly balanced, slight asymmetry"
-          1.0: "asymmetrical, off-center, dynamic composition, unbalanced"
+        evocation:
+          0.0: "Perfect mirror harmony, the serenity of order, everything in its ordained place"
+          0.5: "Balanced but alive, a slight tilt that keeps the eye moving"
+          1.0: "Deliberate imbalance that creates tension, the dynamic energy of the unexpected"
+        tokens:
+          low: [symmetrical, centered, balanced, ordered, harmonious, stable]
+          high: [asymmetrical, off-center, unbalanced, dynamic, irregular, disrupted]
 
       - id: scale
         poles: [intimate, monumental]
         description: "Perceived scale and grandeur"
-        prompt_map:
-          0.0: "intimate, small-scale, personal, cozy"
-          0.5: "human scale"
-          1.0: "monumental, grand, imposing, massive, epic scale"
+        evocation:
+          0.0: "Small enough to hold in your hands, the quiet poetry of miniature worlds"
+          0.5: "Human-sized, relatable, built for the body"
+          1.0: "Towering beyond comprehension, the crushing grandeur that makes you feel small and ancient"
+        tokens:
+          low: [intimate, small, personal, miniature, delicate, close]
+          high: [monumental, grand, imposing, massive, colossal, towering, epic]
 
       - id: density
         poles: [sparse, dense]
         description: "Visual density and information load"
-        prompt_map:
-          0.0: "sparse, clean, minimal elements, breathing room"
-          0.5: "moderate density"
-          1.0: "dense, packed, busy, layered, information-rich"
+        evocation:
+          0.0: "Breathing room between every element, silence made visible, the weight of what's absent"
+          0.5: "A comfortable fullness, neither empty nor crowded"
+          1.0: "Every inch alive with information, a visual cacophony that rewards slow looking"
+        tokens:
+          low: [sparse, minimal, breathing, empty, clean, isolated]
+          high: [dense, packed, layered, busy, crowded, teeming, rich]
 
   # ===================================================================
   # COLOR — Itten: 7 color contrasts
@@ -70,54 +91,76 @@ families:
       - id: value
         poles: [light, dark]
         description: "Overall lightness/darkness"
-        prompt_map:
-          0.0: "bright, light, high-key, luminous, white"
-          0.5: "mid-tones, balanced lighting"
-          1.0: "dark, shadowy, low-key, murky, black"
+        evocation:
+          0.0: "Flooded with light, bleached and luminous, the blinding clarity of noon"
+          0.5: "The soft democracy of middle tones, neither shadow nor glare"
+          1.0: "Swallowed by darkness, shapes emerging from shadow, the weight of unlit spaces"
+        tokens:
+          low: [bright, luminous, white, radiant, high-key, bleached]
+          high: [dark, shadowy, murky, black, low-key, tenebrous, void]
 
       - id: saturation
         poles: [desaturated, saturated]
         description: "Color intensity/purity"
-        prompt_map:
-          0.0: "desaturated, muted, greyscale, washed out, monochrome"
-          0.5: "moderate saturation"
-          1.0: "saturated, vibrant, vivid, bold colors, intense"
+        evocation:
+          0.0: "Color drained to whispers, the quiet dignity of ash and bone, monochrome memories"
+          0.5: "Colors present but restrained, like a melody hummed softly"
+          1.0: "Colors screaming at full volume, vivid and unapologetic, drenched in pure hue"
+        tokens:
+          low: [desaturated, muted, washed, greyscale, monochrome, faded, ashen]
+          high: [saturated, vibrant, vivid, bold, intense, electric, drenched]
 
       - id: temperature
         poles: [cool, warm]
         description: "Color temperature"
-        prompt_map:
-          0.0: "cool colors, blue, teal, icy, cold"
-          0.5: "neutral temperature"
-          1.0: "warm colors, orange, amber, golden, hot"
+        evocation:
+          0.0: "Frozen stillness, icy blue light cutting through silence, the sharp clarity of winter air"
+          0.5: "Neither inviting nor forbidding — a neutral threshold between states"
+          1.0: "Golden firelight embracing stone walls, amber warmth radiating from deep within, the glow of embers"
+        tokens:
+          low: [cold, icy, blue, teal, frost, winter, glacial]
+          high: [warm, golden, amber, orange, fire, ember, molten]
 
       - id: contrast
         poles: [low, high]
         description: "Contrast between light and dark areas"
-        prompt_map:
-          0.0: "low contrast, flat, even lighting, soft"
-          0.5: "moderate contrast"
-          1.0: "high contrast, dramatic lighting, chiaroscuro, stark"
+        evocation:
+          0.0: "Everything bathed in the same soft non-light, no drama, no shadows, flat and even"
+          0.5: "Natural light and shadow playing together, readable depth"
+          1.0: "Brutal chiaroscuro carving the world into light and void, theatrical and unforgiving"
+        tokens:
+          low: [flat, even, soft, diffused, gentle, uniform]
+          high: [contrast, dramatic, chiaroscuro, stark, harsh, theatrical, bold]
 
       - id: palette
         poles: [monochrome, polychrome]
         description: "Color variety"
-        prompt_map:
-          0.0: "monochromatic, single hue, tonal"
-          0.5: "limited palette, analogous colors"
-          1.0: "polychromatic, many colors, rainbow, diverse palette"
+        evocation:
+          0.0: "A single hue explored in all its depth, the discipline of one voice"
+          0.5: "A curated family of related colors, harmonious and controlled"
+          1.0: "The full spectrum unleashed, a carnival of competing hues, chromatic abundance"
+        tokens:
+          low: [monochromatic, tonal, single-hue, limited, restrained]
+          high: [polychromatic, colorful, rainbow, diverse, multicolored, chromatic]
 
       - id: dominant_hue
         type: hue_angle
         range: [0, 360]
         description: "Dominant hue angle (0=red, 60=yellow, 120=green, 180=cyan, 240=blue, 300=magenta)"
-        prompt_map:
-          0: "red dominant"
-          60: "yellow dominant"
-          120: "green dominant"
-          180: "cyan dominant"
-          240: "blue dominant"
-          300: "magenta dominant"
+        evocation:
+          0: "The urgency of red — blood, fire, danger, passion"
+          60: "The optimism of yellow — sunlight, gold, warning, energy"
+          120: "The patience of green — growth, decay, nature, poison"
+          180: "The distance of cyan — ice, technology, clinical clarity"
+          240: "The depth of blue — night, ocean, melancholy, infinity"
+          300: "The tension of magenta — artifice, fever, the edge of violet"
+        tokens:
+          0: [red, crimson, scarlet, vermillion, blood]
+          60: [yellow, gold, amber, saffron, ochre]
+          120: [green, emerald, jade, moss, verdant]
+          180: [cyan, teal, turquoise, aqua]
+          240: [blue, indigo, cobalt, sapphire, navy]
+          300: [magenta, violet, purple, fuschia, plum]
 
   # ===================================================================
   # PERCEPTION — Berlyne: collative variables + Arnheim: dynamics
@@ -128,34 +171,46 @@ families:
       - id: familiarity
         poles: [familiar, strange]
         description: "Novelty/familiarity — Berlyne's collative variable"
-        prompt_map:
-          0.0: "familiar, conventional, recognizable, normal"
-          0.5: "somewhat unusual"
-          1.0: "strange, surreal, uncanny, alien, bizarre, otherworldly"
+        evocation:
+          0.0: "Immediately recognizable, the comfort of the known, nothing to decipher"
+          0.5: "Something slightly off, familiar but tilted, a déjà vu that doesn't quite resolve"
+          1.0: "Deeply alien, the uncanny made visible, forms that resist understanding"
+        tokens:
+          low: [familiar, conventional, recognizable, normal, everyday]
+          high: [strange, surreal, uncanny, alien, bizarre, otherworldly, eldritch]
 
       - id: tension
         poles: [calm, tense]
         description: "Visual tension and energy"
-        prompt_map:
-          0.0: "calm, serene, peaceful, relaxed, tranquil"
-          0.5: "moderate energy"
-          1.0: "tense, aggressive, chaotic, intense, dramatic"
+        evocation:
+          0.0: "Deep calm like still water, every element at rest, the silence after the storm"
+          0.5: "A held breath, potential energy waiting to release"
+          1.0: "Everything vibrating at breaking point, visual violence, the instant before the crash"
+        tokens:
+          low: [calm, serene, peaceful, tranquil, still, quiet, restful]
+          high: [tense, aggressive, chaotic, intense, violent, explosive, volatile]
 
       - id: movement
         poles: [static, dynamic]
         description: "Implied motion and dynamism"
-        prompt_map:
-          0.0: "static, still, frozen, posed, stable"
-          0.5: "slight movement"
-          1.0: "dynamic, motion, action, kinetic, flowing"
+        evocation:
+          0.0: "Frozen in amber, time suspended, the eternal stillness of a held pose"
+          0.5: "A gentle drift, slow movement like clouds or tides"
+          1.0: "Everything in motion, caught mid-leap, the blur of speed and force"
+        tokens:
+          low: [static, still, frozen, posed, stable, motionless, fixed]
+          high: [dynamic, motion, kinetic, flowing, rushing, sweeping, turbulent]
 
       - id: readability
         poles: [ambiguous, readable]
         description: "Clarity of visual communication"
-        prompt_map:
-          0.0: "ambiguous, abstract, unclear, layered meaning"
-          0.5: "semi-readable"
-          1.0: "clear, readable, obvious, graphic, iconic"
+        evocation:
+          0.0: "Meaning dissolved into abstraction, shapes that refuse to be named, open to interpretation"
+          0.5: "Legible but layered, a clear surface with depths underneath"
+          1.0: "Instantly understood, graphic and iconic, communication without ambiguity"
+        tokens:
+          low: [ambiguous, abstract, unclear, layered, mysterious, obscure]
+          high: [clear, readable, graphic, iconic, obvious, legible, bold]
 
   # ===================================================================
   # SEMANTIC — Osgood EPA dimensions
@@ -166,26 +221,35 @@ families:
       - id: evaluation
         poles: [repulsive, attractive]
         description: "Osgood E: good-bad, attractive-repulsive"
-        prompt_map:
-          0.0: "ugly, repulsive, disturbing, grotesque"
-          0.5: "neutral"
-          1.0: "beautiful, attractive, appealing, elegant"
+        evocation:
+          0.0: "Visceral repulsion, the beauty of ugliness, deliberately disturbing and confrontational"
+          0.5: "Neither seductive nor repellent — matter-of-fact existence"
+          1.0: "Magnetic beauty that holds the gaze, elegance and grace made visible"
+        tokens:
+          low: [ugly, grotesque, disturbing, repulsive, harsh, brutal]
+          high: [beautiful, elegant, attractive, graceful, refined, appealing]
 
       - id: potency
         poles: [fragile, powerful]
         description: "Osgood P: strong-weak"
-        prompt_map:
-          0.0: "fragile, delicate, light, ethereal, weak"
-          0.5: "moderate"
-          1.0: "powerful, strong, heavy, solid, imposing"
+        evocation:
+          0.0: "Delicate as a breath on glass, forms that might dissolve if you look too hard"
+          0.5: "Solid but not imposing, present without dominating"
+          1.0: "Crushing weight and undeniable force, forms that command the space around them"
+        tokens:
+          low: [fragile, delicate, ethereal, light, wispy, gossamer, thin]
+          high: [powerful, strong, heavy, solid, imposing, massive, forceful]
 
       - id: activity
         poles: [passive, active]
         description: "Osgood A: active-passive"
-        prompt_map:
-          0.0: "passive, still, dormant, inert"
-          0.5: "moderate activity"
-          1.0: "active, energetic, lively, animated"
+        evocation:
+          0.0: "Dormant, waiting, the heavy patience of stone, existence without action"
+          0.5: "Quietly alive, a pulse beneath the surface"
+          1.0: "Crackling with energy, everything happening at once, restless and electric"
+        tokens:
+          low: [passive, dormant, inert, still, resting, sleeping, latent]
+          high: [active, energetic, lively, animated, buzzing, kinetic, alive]
 
   # ===================================================================
   # RENDERING — generation-specific dimensions
@@ -196,39 +260,54 @@ families:
       - id: realism
         poles: [abstract, photorealistic]
         description: "Level of representational fidelity"
-        prompt_map:
-          0.0: "abstract, non-representational, conceptual"
-          0.5: "stylized, semi-realistic, illustrated"
-          1.0: "photorealistic, hyperrealistic, photograph"
+        evocation:
+          0.0: "Pure form and color freed from representation, the idea before the thing"
+          0.5: "Stylized reality, the world seen through an artist's deliberate filter"
+          1.0: "Indistinguishable from a photograph, every pore and reflection captured"
+        tokens:
+          low: [abstract, conceptual, non-representational, expressionist, painterly]
+          high: [photorealistic, hyperrealistic, photograph, lifelike, rendered]
 
       - id: stroke
         poles: [thin, thick]
         description: "Line weight and stroke quality"
-        prompt_map:
-          0.0: "thin lines, fine detail, delicate strokes, hairline"
-          0.5: "medium strokes"
-          1.0: "thick lines, bold strokes, chunky, heavy outlines"
+        evocation:
+          0.0: "Hairline precision, the trembling accuracy of a needle on paper"
+          0.5: "Confident mid-weight lines, neither precious nor crude"
+          1.0: "Bold slashes of thick pigment, the decisive weight of a loaded brush"
+        tokens:
+          low: [thin, fine, delicate, hairline, precise, sharp]
+          high: [thick, bold, chunky, heavy, broad, gestural, impasto]
 
       - id: texture
         poles: [smooth, textured]
         description: "Surface texture quality"
-        prompt_map:
-          0.0: "smooth, clean, polished, glossy"
-          0.5: "some texture"
-          1.0: "textured, rough, gritty, grainy, tactile"
+        evocation:
+          0.0: "Surfaces like still water, flawless and untouched, the perfection of polished glass"
+          0.5: "Tactile but not rough, surfaces that invite touch"
+          1.0: "Every surface scarred and weathered, grain and grit you can almost feel, raw material honesty"
+        tokens:
+          low: [smooth, polished, glossy, clean, sleek, pristine]
+          high: [textured, rough, gritty, grainy, weathered, tactile, raw]
 
       - id: materiality
         poles: [flat, volumetric]
         description: "Sense of 3D volume and material presence"
-        prompt_map:
-          0.0: "flat, 2D, graphic, paper-like"
-          0.5: "slight depth"
-          1.0: "volumetric, 3D, sculptural, tangible, material"
+        evocation:
+          0.0: "Pure surface, paper-thin reality, the elegant flatness of a woodblock print"
+          0.5: "Suggestion of depth, forms gently emerging from the plane"
+          1.0: "Sculptural presence you could walk around, weight and mass made undeniable"
+        tokens:
+          low: [flat, 2D, graphic, paper, cut-out, silhouette]
+          high: [volumetric, 3D, sculptural, tangible, solid, dimensional, carved]
 
       - id: finish
         poles: [raw, polished]
         description: "Level of finish and polish"
-        prompt_map:
-          0.0: "raw, rough, unfinished, sketch-like, crude"
-          0.5: "semi-finished"
-          1.0: "polished, refined, clean, professional, finished"
+        evocation:
+          0.0: "The honest roughness of first marks, process visible, nothing hidden or smoothed away"
+          0.5: "Worked but not overworked, craft visible but controlled"
+          1.0: "Every edge refined, every surface resolved, the invisible labor of total polish"
+        tokens:
+          low: [raw, rough, unfinished, sketch, crude, loose, gestural]
+          high: [polished, refined, finished, professional, perfect, clean, precise]

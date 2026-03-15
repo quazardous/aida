@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveGenome, buildPromptFromGenome } from '../dist/cli/lib/genome-resolver.js';
+import { resolveGenome, buildPromptFromGenome, buildMoodText } from '../dist/cli/lib/genome-resolver.js';
 
 function makeGene(axis, value, confidence = 0.5, mode = 'inherit', family = 'test', layer = 'universal') {
   return { axis, value, confidence, mode, family, layer };
@@ -241,7 +241,7 @@ describe('Genome Resolver - Deep chain', () => {
 });
 
 describe('Prompt Builder', () => {
-  it('should build prompt from resolved genome', () => {
+  it('should build prompt with evocation + weighted tokens', () => {
     const root = makeNodeData('root', [
       makeGene('temperature', 0.9, 0.8),
       makeGene('complexity', 0.1, 0.7),
@@ -250,27 +250,70 @@ describe('Prompt Builder', () => {
 
     const resolved = resolveGenome([root]);
 
-    const promptMaps = new Map();
-    promptMaps.set('temperature', {
-      '0': 'cool colors, blue, icy',
-      '0.5': 'neutral temperature',
-      '1': 'warm colors, amber, golden'
+    const axisData = new Map();
+    axisData.set('temperature', {
+      evocation: {
+        '0': 'Frozen stillness, icy blue light',
+        '0.5': 'A neutral threshold',
+        '1': 'Golden firelight embracing stone walls'
+      },
+      tokens: {
+        low: ['cold', 'icy', 'frost'],
+        high: ['warm', 'golden', 'amber']
+      }
     });
-    promptMaps.set('complexity', {
-      '0': 'minimal, simple, clean',
-      '0.5': 'moderate detail',
-      '1': 'elaborate, intricate, ornate'
+    axisData.set('complexity', {
+      evocation: {
+        '0': 'Stripped to its essence, every element earns its place',
+        '0.5': 'Enough detail to intrigue',
+        '1': 'Layers upon layers of intricate ornamentation'
+      },
+      tokens: {
+        low: ['minimal', 'simple', 'clean'],
+        high: ['elaborate', 'intricate', 'ornate']
+      }
     });
-    promptMaps.set('tension', {
-      '0': 'calm, serene',
-      '0.5': 'moderate energy',
-      '1': 'tense, aggressive'
+    axisData.set('tension', {
+      evocation: {
+        '0': 'Deep calm like still water',
+        '0.5': 'A held breath',
+        '1': 'Everything vibrating at breaking point'
+      },
+      tokens: {
+        low: ['calm', 'serene'],
+        high: ['tense', 'aggressive']
+      }
     });
 
-    const prompt = buildPromptFromGenome(resolved, promptMaps, 0.3);
+    const prompt = buildPromptFromGenome(resolved, axisData, 0.3);
 
-    assert.ok(prompt.includes('warm'));
-    assert.ok(prompt.includes('minimal'));
-    assert.ok(!prompt.includes('moderate energy')); // skipped — near center
+    // Should contain evocations for temperature (0.9→firelight) and complexity (0.1→essence)
+    assert.ok(prompt.includes('firelight'), `Expected "firelight" in: ${prompt}`);
+    assert.ok(prompt.includes('essence'), `Expected "essence" in: ${prompt}`);
+    // Should contain weighted tokens
+    assert.ok(prompt.includes('(warm:'), `Expected weighted warm token in: ${prompt}`);
+    assert.ok(prompt.includes('(minimal:'), `Expected weighted minimal token in: ${prompt}`);
+    // Tension near center + low confidence — should be skipped
+    assert.ok(!prompt.includes('calm'), `Should not include tension (near center): ${prompt}`);
+  });
+
+  it('should build mood text (evocations only, no tokens)', () => {
+    const root = makeNodeData('root', [
+      makeGene('temperature', 0.9, 0.8),
+    ]);
+    const resolved = resolveGenome([root]);
+
+    const axisData = new Map();
+    axisData.set('temperature', {
+      evocation: {
+        '0': 'Frozen stillness',
+        '1': 'Golden firelight'
+      },
+      tokens: { low: ['cold'], high: ['warm'] }
+    });
+
+    const mood = buildMoodText(resolved, axisData, 0.2);
+    assert.ok(mood.includes('firelight'));
+    assert.ok(!mood.includes('(warm:'), 'Mood text should not include weighted tokens');
   });
 });

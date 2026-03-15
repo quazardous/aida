@@ -8,8 +8,8 @@ import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
 import { DbManager } from './db-manager.js';
-import { resolveGenome, buildPromptFromGenome } from '../lib/genome-resolver.js';
-import type { NodeGenomeData, ResolvedGenome } from '../lib/genome-resolver.js';
+import { resolveGenome, buildPromptFromGenome, buildMoodText } from '../lib/genome-resolver.js';
+import type { NodeGenomeData, ResolvedGenome, AxisPromptData } from '../lib/genome-resolver.js';
 import type {
   AidaNode, Gene, Genome, Wall, Attractor, Variation, Pass, Reference, Job, JobType, JobStatus,
   NodeStatus, Verdict, Transform, AxisDef, Tweak, DirtyReport
@@ -367,15 +367,36 @@ export class Store {
   }
 
   /**
+   * Get axis prompt data for all axes (evocation + tokens + legacy prompt_map).
+   */
+  private getAxisPromptData(): Map<string, AxisPromptData> {
+    const data = new Map<string, AxisPromptData>();
+    for (const axis of this.axes.values()) {
+      data.set(axis.id, {
+        evocation: axis.evocation,
+        tokens: axis.tokens,
+        prompt_map: axis.prompt_map
+      });
+    }
+    return data;
+  }
+
+  /**
    * Build a generation prompt from a node's resolved genome.
+   * Combines evocative text + weighted tokens for the image generator.
    */
   buildNodePrompt(nodeId: string, threshold: number = 0.2): string {
     const resolved = this.resolveNodeGenome(nodeId);
-    const promptMaps = new Map<string, Record<string, string>>();
-    for (const axis of this.axes.values()) {
-      if (axis.prompt_map) promptMaps.set(axis.id, axis.prompt_map);
-    }
-    return buildPromptFromGenome(resolved, promptMaps, threshold);
+    return buildPromptFromGenome(resolved, this.getAxisPromptData(), threshold);
+  }
+
+  /**
+   * Build a mood board text from a node's resolved genome.
+   * Evocative descriptions only — for human reading, not for the generator.
+   */
+  buildNodeMoodText(nodeId: string, threshold: number = 0.2): string {
+    const resolved = this.resolveNodeGenome(nodeId);
+    return buildMoodText(resolved, this.getAxisPromptData(), threshold);
   }
 
   /**

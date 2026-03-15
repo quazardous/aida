@@ -44,6 +44,15 @@ export interface AxisDef {
   description: string;
   family: string;
   layer: 'universal' | 'custom';
+  // Evocative descriptions at each pole (natural language for Flux + mood board)
+  evocation?: Record<string, string>;
+  // Parametric tokens weighted by axis value (for prompt weighting)
+  tokens?: {
+    low: string[];    // keywords for value near 0
+    high: string[];   // keywords for value near 1
+    [key: string]: string[];  // hue_angle: keyed by angle
+  };
+  // Legacy — still supported
   prompt_map?: Record<string, string>;
   // Custom axis extras
   origin?: string;

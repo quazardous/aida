@@ -3,9 +3,7 @@
  */
 import path from 'path';
 import type { Store } from '../managers/store.js';
-import type { Engine, EngineConfig } from '../engine/index.js';
-import { resolveGenome, buildPromptFromGenome } from '../lib/genome-resolver.js';
-import type { NodeGenomeData } from '../lib/genome-resolver.js';
+import type { Engine } from '../engine/index.js';
 import { ok, err } from './types.js';
 import type { ToolDefinition } from './types.js';
 
@@ -50,26 +48,13 @@ export function createGenerateTools(store: Store, engine: Engine, treePath: stri
 
           const count = args.count || 3;
 
-          // Resolve genome
-          // For now, only universe_root (single-node chain)
-          // TODO: build full ancestor chain for child nodes
-          const genome = store.getGenome(args.node_id);
-          const genesMap: Record<string, any> = {};
-          for (const g of genome) {
-            genesMap[g.axis] = g;
-          }
-          const nodeData: NodeGenomeData = {
-            node_id: args.node_id,
-            genes: genesMap,
-            transforms: [],
-            walls: store.getWalls(args.node_id)
-          };
-          const resolved = resolveGenome([nodeData]);
+          // Resolve genome via store (full ancestor chain)
+          const resolved = store.resolveNodeGenome(args.node_id);
 
           // Check for violations
           if (resolved.violations.length > 0) {
             return err(
-              `Genome has wall violations: ${resolved.violations.map(v => `${v.axis} (${v.value} ${v.wall.condition})`).join(', ')}`,
+              `Genome has wall violations: ${resolved.violations.map((v: any) => `${v.axis} (${v.value} ${v.wall.condition})`).join(', ')}`,
               [{
                 tool: 'node_get',
                 args: { id: args.node_id },
@@ -77,14 +62,6 @@ export function createGenerateTools(store: Store, engine: Engine, treePath: stri
                 priority: 'high'
               }]
             );
-          }
-
-          // Build prompt maps from axes
-          const promptMaps = new Map<string, Record<string, string>>();
-          for (const axis of store.getAllAxes()) {
-            if (axis.prompt_map) {
-              promptMaps.set(axis.id, axis.prompt_map);
-            }
           }
 
           // Identify uncertain axes for A/B exploration
@@ -96,46 +73,24 @@ export function createGenerateTools(store: Store, engine: Engine, treePath: stri
 
           for (let i = 0; i < count; i++) {
             let label: string;
-            let modifiedResolved = { ...resolved };
 
             if (i === count - 1 && args.surprise !== false && count >= 3) {
               // Surprise variation: random mutation on a random uncertain axis
               label = 'surprise';
               if (topUncertain.length > 0) {
                 const randomAxis = topUncertain[Math.floor(Math.random() * topUncertain.length)];
-                const gene = resolved.genes[randomAxis];
-                if (gene) {
-                  modifiedResolved = {
-                    ...resolved,
-                    genes: {
-                      ...resolved.genes,
-                      [randomAxis]: { ...gene, value: Math.random() }
-                    }
-                  };
-                }
+                store.updateGene(args.node_id, randomAxis, Math.random());
               }
             } else if (topUncertain.length > 0 && i < topUncertain.length) {
-              // A/B on uncertain axes: push one direction
               const axis = topUncertain[i % topUncertain.length];
-              const gene = resolved.genes[axis];
-              if (gene) {
-                const direction = i % 2 === 0 ? 0.8 : 0.2;
-                label = `explore_${axis}_${direction > 0.5 ? 'high' : 'low'}`;
-                modifiedResolved = {
-                  ...resolved,
-                  genes: {
-                    ...resolved.genes,
-                    [axis]: { ...gene, value: direction }
-                  }
-                };
-              } else {
-                label = `variation_${i + 1}`;
-              }
+              const direction = i % 2 === 0 ? 0.8 : 0.2;
+              label = `explore_${axis}_${direction > 0.5 ? 'high' : 'low'}`;
+              store.updateGene(args.node_id, axis, direction);
             } else {
               label = `variation_${i + 1}`;
             }
 
-            const prompt = args.prompt_override || buildPromptFromGenome(modifiedResolved, promptMaps, 0.2);
+            const prompt = args.prompt_override || store.buildNodePrompt(args.node_id);
 
             // Create variation in store
             const variation = store.createVariation(args.node_id, passNum, prompt);
@@ -247,52 +202,15 @@ export function createGenerateTools(store: Store, engine: Engine, treePath: stri
         const node = store.getNode(args.node_id);
         if (!node) return err(`Node not found: ${args.node_id}`);
 
-        const genome = store.getGenome(args.node_id);
-        const genesMap: Record<string, any> = {};
-        for (const g of genome) genesMap[g.axis] = g;
-
-        const nodeData: NodeGenomeData = {
-          node_id: args.node_id,
-          genes: genesMap,
-          transforms: [],
-          walls: store.getWalls(args.node_id)
-        };
-        const resolved = resolveGenome([nodeData]);
-
-        const promptMaps = new Map<string, Record<string, string>>();
-        for (const axis of store.getAllAxes()) {
-          if (axis.prompt_map) promptMaps.set(axis.id, axis.prompt_map);
-        }
-
-        const prompt = buildPromptFromGenome(resolved, promptMaps, 0.2);
-
-        // Also show per-axis contributions
-        const contributions: Array<{ axis: string; value: number; confidence: number; fragment: string }> = [];
-        for (const [axisId, gene] of Object.entries(resolved.genes)) {
-          if (Math.abs(gene.value - 0.5) < 0.2 && gene.confidence < 0.5) continue;
-          const map = promptMaps.get(axisId);
-          if (!map) continue;
-
-          const keys = Object.keys(map).map(Number).sort((a, b) => a - b);
-          let closest = keys[0];
-          for (const k of keys) {
-            if (Math.abs(gene.value - k) < Math.abs(gene.value - closest)) closest = k;
-          }
-
-          contributions.push({
-            axis: axisId,
-            value: gene.value,
-            confidence: gene.confidence,
-            fragment: map[closest.toString()] || ''
-          });
-        }
+        const prompt = store.buildNodePrompt(args.node_id);
+        const moodText = store.buildNodeMoodText(args.node_id);
 
         return ok({
           success: true,
           data: {
             node_id: args.node_id,
             prompt,
-            contributions: contributions.sort((a, b) => Math.abs(b.value - 0.5) - Math.abs(a.value - 0.5))
+            mood_text: moodText
           }
         });
       }

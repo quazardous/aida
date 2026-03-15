@@ -215,7 +215,8 @@ export function createNodeTools(store: Store): ToolDefinition[] {
             resolved_genome: grouped,
             effective_walls: resolved.walls,
             violations: resolved.violations,
-            prompt_preview: store.buildNodePrompt(args.id)
+            prompt_preview: store.buildNodePrompt(args.id),
+            mood_text: store.buildNodeMoodText(args.id)
           }
         });
       }

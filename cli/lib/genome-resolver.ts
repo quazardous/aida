@@ -270,40 +270,135 @@ function interpolateCurve(x: number, curve: [number, number][]): number {
 
 // --- Prompt builder ---
 
+export interface AxisPromptData {
+  evocation?: Record<string, string>;
+  tokens?: { low?: string[]; high?: string[]; [key: string]: string[] | undefined };
+  prompt_map?: Record<string, string>;  // legacy
+}
+
 /**
  * Build a generation prompt from a resolved genome.
- * Uses the prompt_map from each axis definition to translate values into text.
+ *
+ * For each significant axis:
+ *   1. Pick the closest evocation text (natural language)
+ *   2. Add weighted tokens: (cold:1.2), (warm:0.3) based on axis value
+ *   3. Fallback to legacy prompt_map if no evocation/tokens
  */
 export function buildPromptFromGenome(
   resolved: ResolvedGenome,
-  axisPromptMaps: Map<string, Record<string, string>>,
-  threshold: number = 0.3 // only include axes that deviate from 0.5 by this much
+  axisData: Map<string, AxisPromptData>,
+  threshold: number = 0.3
 ): string {
-  const fragments: string[] = [];
+  const evocations: string[] = [];
+  const weightedTokens: string[] = [];
 
   for (const [axisId, gene] of Object.entries(resolved.genes)) {
-    const promptMap = axisPromptMaps.get(axisId);
-    if (!promptMap) continue;
+    const data = axisData.get(axisId);
+    if (!data) continue;
 
-    // Skip axes near center (neutral)
+    // Skip axes near center with low confidence
     if (Math.abs(gene.value - 0.5) < threshold && gene.confidence < 0.5) continue;
 
-    // Find closest prompt_map entry
-    const keys = Object.keys(promptMap).map(Number).sort((a, b) => a - b);
-    let closest = keys[0];
-    let minDist = Math.abs(gene.value - closest);
-
-    for (const key of keys) {
-      const dist = Math.abs(gene.value - key);
-      if (dist < minDist) {
-        closest = key;
-        minDist = dist;
-      }
+    // 1. Evocation text
+    if (data.evocation) {
+      const evoc = pickClosestEntry(gene.value, data.evocation);
+      if (evoc) evocations.push(evoc);
     }
 
-    const prompt = promptMap[closest.toString()];
-    if (prompt) fragments.push(prompt);
+    // 2. Weighted tokens
+    if (data.tokens) {
+      const tokens = buildWeightedTokens(gene.value, data.tokens);
+      if (tokens.length > 0) weightedTokens.push(...tokens);
+    }
+
+    // 3. Legacy fallback
+    if (!data.evocation && !data.tokens && data.prompt_map) {
+      const legacy = pickClosestEntry(gene.value, data.prompt_map);
+      if (legacy) evocations.push(legacy);
+    }
   }
 
-  return fragments.join(', ');
+  // Combine: evocations first (scene-setting), then weighted tokens (fine-tuning)
+  const parts: string[] = [];
+  if (evocations.length > 0) parts.push(evocations.join('. '));
+  if (weightedTokens.length > 0) parts.push(weightedTokens.join(', '));
+
+  return parts.join(', ');
+}
+
+/**
+ * Build a mood board text (evocations only, no tokens).
+ */
+export function buildMoodText(
+  resolved: ResolvedGenome,
+  axisData: Map<string, AxisPromptData>,
+  threshold: number = 0.2
+): string {
+  const evocations: string[] = [];
+
+  for (const [axisId, gene] of Object.entries(resolved.genes)) {
+    const data = axisData.get(axisId);
+    if (!data?.evocation) continue;
+    if (Math.abs(gene.value - 0.5) < threshold && gene.confidence < 0.5) continue;
+
+    const evoc = pickClosestEntry(gene.value, data.evocation);
+    if (evoc) evocations.push(evoc);
+  }
+
+  return evocations.join('\n');
+}
+
+// --- Helpers ---
+
+function pickClosestEntry(value: number, map: Record<string, string>): string | null {
+  const keys = Object.keys(map).map(Number).sort((a, b) => a - b);
+  if (keys.length === 0) return null;
+
+  let closest = keys[0];
+  let minDist = Math.abs(value - closest);
+
+  for (const key of keys) {
+    const dist = Math.abs(value - key);
+    if (dist < minDist) {
+      closest = key;
+      minDist = dist;
+    }
+  }
+
+  return map[closest.toString()] || null;
+}
+
+/**
+ * Build weighted tokens from axis value.
+ * value near 0 → low tokens weighted high, high tokens weighted low
+ * value near 1 → high tokens weighted high, low tokens weighted low
+ */
+function buildWeightedTokens(
+  value: number,
+  tokens: { low?: string[]; high?: string[]; [key: string]: string[] | undefined }
+): string[] {
+  const result: string[] = [];
+
+  if (tokens.low && tokens.high) {
+    // Bipolar axis
+    const lowWeight = Math.max(0.1, 1.3 - value * 1.2);   // 0→1.3, 0.5→0.7, 1→0.1
+    const highWeight = Math.max(0.1, value * 1.2 + 0.1);   // 0→0.1, 0.5→0.7, 1→1.3
+
+    // Only include tokens with weight > 0.5 to avoid noise
+    if (lowWeight > 0.5) {
+      // Pick top 2-3 tokens, not all
+      const count = lowWeight > 1.0 ? 3 : 2;
+      for (const token of tokens.low.slice(0, count)) {
+        result.push(`(${token}:${lowWeight.toFixed(1)})`);
+      }
+    }
+    if (highWeight > 0.5) {
+      const count = highWeight > 1.0 ? 3 : 2;
+      for (const token of tokens.high.slice(0, count)) {
+        result.push(`(${token}:${highWeight.toFixed(1)})`);
+      }
+    }
+  }
+
+  return result;
 }
