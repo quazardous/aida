@@ -50,6 +50,11 @@ You have access to the `aida-tree` MCP server with these tools:
 - `dirty_status` — all dirty nodes by severity
 - `dirty_clean` — auto-clean dirty:minor nodes
 
+### Generation
+- `generate_variations` — resolve genome, build prompts, create N variation records
+- `generate_render` — render variation images using configured engine (ComfyUI/Forge/mock)
+- `generate_prompt_preview` — preview prompt from current genome without generating
+
 ### Comments
 - `comment_pending` — list unprocessed .comment files
 - `comment_process` — parse a .comment into actions (without executing)

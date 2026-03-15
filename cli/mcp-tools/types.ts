@@ -8,7 +8,7 @@ export interface ToolDefinition {
     description: string;
     inputSchema: Record<string, unknown>;
   };
-  handler: (args: any) => ToolResult;
+  handler: (args: any) => ToolResult | Promise<ToolResult>;
 }
 
 export interface NextAction {

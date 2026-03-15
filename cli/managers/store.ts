@@ -458,10 +458,131 @@ export class Store {
   // === REBUILD ===
 
   /**
-   * Rebuild DB index from YAML files
+   * Rebuild DB index from YAML files.
+   * Walks the tree directory, parses all _node.yaml and variation meta.yaml,
+   * and re-indexes everything into SQLite.
    */
-  rebuildIndex(): void {
-    // TODO: walk tree directory, parse all _node.yaml and variation meta.yaml
-    // re-index everything into SQLite
+  rebuildIndex(): { nodes: number; variations: number; walls: number } {
+    // Drop existing data
+    this.db.clearAll();
+
+    let nodeCount = 0;
+    let variationCount = 0;
+    let wallCount = 0;
+
+    // Walk tree recursively
+    const walkTree = (dir: string, parentId: string | null, depth: number) => {
+      const nodeYaml = path.join(dir, '_node.yaml');
+      if (!fs.existsSync(nodeYaml)) return;
+
+      const content = yaml.load(fs.readFileSync(nodeYaml, 'utf-8')) as NodeFile;
+      if (!content?.node) return;
+
+      const nodeData = content.node;
+      const relativePath = path.relative(this.treePath, dir);
+      const now = new Date().toISOString();
+
+      // Index node
+      const node: AidaNode = {
+        id: nodeData.id,
+        name: nodeData.name,
+        type: nodeData.type,
+        parent_id: parentId,
+        status: nodeData.status || 'draft',
+        path: relativePath,
+        depth,
+        contrast_with: nodeData.contrast_with,
+        created_at: now,
+        updated_at: now
+      };
+
+      this.db.createNode(node);
+      nodeCount++;
+
+      // Index genome
+      if (nodeData.genome?.universal) {
+        for (const [axisId, gene] of Object.entries(nodeData.genome.universal)) {
+          const axisDef = this.axes.get(axisId);
+          this.db.setGene(nodeData.id, {
+            axis: axisId,
+            value: gene.value,
+            confidence: gene.confidence,
+            mode: (gene.mode || 'inherit') as any,
+            family: axisDef?.family || 'unknown',
+            layer: 'universal'
+          });
+        }
+      }
+      if (nodeData.genome?.custom) {
+        for (const [axisId, gene] of Object.entries(nodeData.genome.custom)) {
+          const axisDef = this.axes.get(axisId);
+          this.db.setGene(nodeData.id, {
+            axis: axisId,
+            value: gene.value,
+            confidence: gene.confidence,
+            mode: (gene.mode || 'inherit') as any,
+            family: axisDef?.family || 'custom',
+            layer: 'custom'
+          });
+        }
+      }
+
+      // Index walls
+      if (nodeData.walls) {
+        for (const wall of nodeData.walls) {
+          this.db.addWall({
+            node_id: nodeData.id,
+            axis: wall.axis,
+            condition: wall.condition,
+            reason: wall.reason,
+            propagate: wall.propagate
+          });
+          wallCount++;
+        }
+      }
+
+      // Index variations
+      const varsDir = path.join(dir, 'variations');
+      if (fs.existsSync(varsDir)) {
+        for (const varEntry of fs.readdirSync(varsDir, { withFileTypes: true })) {
+          if (!varEntry.isDirectory()) continue;
+          const metaPath = path.join(varsDir, varEntry.name, 'meta.yaml');
+          if (!fs.existsSync(metaPath)) continue;
+
+          const metaContent = yaml.load(fs.readFileSync(metaPath, 'utf-8')) as any;
+          if (!metaContent?.variation) continue;
+
+          const v = metaContent.variation;
+          this.db.createVariation({
+            id: v.id,
+            node_id: v.node_id || nodeData.id,
+            pass: v.pass || 0,
+            genome_snapshot: v.genome_snapshot || {},
+            rating: v.rating ?? null,
+            verdict: v.verdict || 'pending',
+            notes: v.notes ?? null,
+            tags: v.tags || [],
+            tweaks: v.tweaks || [],
+            asset_path: v.asset_path ?? null,
+            prompt_used: v.prompt_used ?? null,
+            created_at: v.created_at || now
+          });
+          variationCount++;
+        }
+      }
+
+      // Recurse into subdirectories (skip 'variations')
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        if (entry.name === 'variations' || entry.name.startsWith('.')) continue;
+        walkTree(path.join(dir, entry.name), nodeData.id, depth + 1);
+      }
+    };
+
+    this.db.transaction(() => {
+      walkTree(this.treePath, null, 0);
+    });
+
+    return { nodes: nodeCount, variations: variationCount, walls: wallCount };
   }
 }

@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "node --test test/",
+    "test": "node --test test/*.test.js",
     "mcp": "node dist/mcp/aida-server.js"
   },
   "dependencies": {

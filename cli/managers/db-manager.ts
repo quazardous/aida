@@ -132,7 +132,7 @@ export class DbManager {
   }
 
   getNode(id: string): AidaNode | null {
-    return this.db.prepare('SELECT * FROM nodes WHERE id = ?').get(id) as AidaNode | null;
+    return this.db.prepare('SELECT * FROM nodes WHERE id = ?').get(id) as AidaNode ?? null;
   }
 
   getChildren(parentId: string): AidaNode[] {
@@ -186,7 +186,7 @@ export class DbManager {
   }
 
   getGene(nodeId: string, axis: string): (Gene & { family: string; layer: string }) | null {
-    return this.db.prepare('SELECT * FROM genome WHERE node_id = ? AND axis = ?').get(nodeId, axis) as (Gene & { family: string; layer: string }) | null;
+    return this.db.prepare('SELECT * FROM genome WHERE node_id = ? AND axis = ?').get(nodeId, axis) as (Gene & { family: string; layer: string }) ?? null;
   }
 
   // === WALLS ===
@@ -320,7 +320,7 @@ export class DbManager {
   }
 
   getActivePass(): Pass | null {
-    return this.db.prepare("SELECT * FROM passes WHERE status = 'active' ORDER BY id DESC LIMIT 1").get() as Pass | null;
+    return this.db.prepare("SELECT * FROM passes WHERE status = 'active' ORDER BY id DESC LIMIT 1").get() as Pass ?? null;
   }
 
   closePass(id: number): void {
@@ -329,6 +329,19 @@ export class DbManager {
   }
 
   // === QUERIES ===
+
+  /**
+   * Clear all data (for rebuild)
+   */
+  clearAll(): void {
+    this.db.exec('DELETE FROM comments');
+    this.db.exec('DELETE FROM passes');
+    this.db.exec('DELETE FROM variations');
+    this.db.exec('DELETE FROM attractors');
+    this.db.exec('DELETE FROM walls');
+    this.db.exec('DELETE FROM genome');
+    this.db.exec('DELETE FROM nodes');
+  }
 
   /**
    * Search nodes by axis value range

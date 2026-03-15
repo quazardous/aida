@@ -22,6 +22,9 @@ import { createPassTools } from '../cli/mcp-tools/pass-tools.js';
 import { createDirtyTools } from '../cli/mcp-tools/dirty-tools.js';
 import { createTreeTools } from '../cli/mcp-tools/tree-tools.js';
 import { createCommentTools } from '../cli/mcp-tools/comment-tools.js';
+import { createGenerateTools } from '../cli/mcp-tools/generate-tools.js';
+import { createEngine } from '../cli/engine/index.js';
+import type { EngineConfig } from '../cli/engine/index.js';
 import type { ToolDefinition } from '../cli/mcp-tools/types.js';
 
 // --- Resolve project paths ---
@@ -65,6 +68,24 @@ async function main() {
   // Create store
   const store = new Store({ treePath, dbPath, axesPath });
 
+  // Create engine from config
+  const engineConfig: EngineConfig = {
+    backend: config.engine?.backend || 'mock',
+    api_url: config.engine?.api_url || 'http://localhost:8188',
+    api_key: config.engine?.api_key,
+    default_model: config.engine?.default_model || 'flux-dev',
+    default_steps: config.engine?.default_steps || 25,
+    default_cfg: config.engine?.default_cfg || 7.0,
+    default_sampler: config.engine?.default_sampler || 'euler',
+    default_scheduler: config.engine?.default_scheduler || 'normal',
+    default_width: config.engine?.default_width || 1024,
+    default_height: config.engine?.default_height || 1024,
+    batch_size: config.engine?.batch_size || 3,
+    seed_mode: config.engine?.seed_mode || 'random',
+    fixed_seed: config.engine?.fixed_seed
+  };
+  const engine = createEngine(engineConfig);
+
   // Collect all tools
   const allTools: ToolDefinition[] = [
     ...createNodeTools(store),
@@ -73,7 +94,8 @@ async function main() {
     ...createPassTools(store),
     ...createDirtyTools(store),
     ...createTreeTools(store),
-    ...createCommentTools(store, treePath)
+    ...createCommentTools(store, treePath),
+    ...createGenerateTools(store, engine, treePath)
   ];
 
   // Build handler map
@@ -106,7 +128,7 @@ async function main() {
     }
 
     try {
-      return handler(args || {});
+      return await handler(args || {});
     } catch (e: any) {
       return {
         content: [{ type: 'text' as const, text: JSON.stringify({ error: e.message }) }],
